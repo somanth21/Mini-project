@@ -1,0 +1,32 @@
+# Node.js
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Java Maven
+**/target/
+.idea/
+*.class
+*.jar
+*.war
+*.ear
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+.tox/
+.coverage
+.cache
+*.log
+ai-service/ai_logs.db
+
+# OS
+.DS_Store
+Thumbs.db
