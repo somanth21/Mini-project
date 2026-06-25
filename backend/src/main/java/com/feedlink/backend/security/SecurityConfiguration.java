@@ -29,7 +29,7 @@ public class SecurityConfiguration {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/error", "/api/auth/**", "/h2-console/**").permitAll()
+                        .requestMatchers("/", "/error", "/api/auth/**", "/h2-console/**", "/ws/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

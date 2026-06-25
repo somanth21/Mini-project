@@ -53,4 +53,9 @@ public class AiController {
     public ResponseEntity<Map<String, Object>> getAnalytics() {
         return ResponseEntity.ok(aiService.getAnalytics());
     }
+
+    @GetMapping("/demand-forecast")
+    public ResponseEntity<Map<String, Object>> getDemandForecast() {
+        return ResponseEntity.ok(aiService.getDemandForecast());
+    }
 }

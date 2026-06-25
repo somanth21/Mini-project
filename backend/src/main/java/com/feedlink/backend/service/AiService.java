@@ -128,4 +128,25 @@ public class AiService {
         if (servings > 20) return "MEDIUM";
         return "LOW";
     }
+
+    public Map<String, Object> chatbotMessage(Map<String, Object> payload) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(payload, headers);
+
+        ResponseEntity<Map> response = restTemplate.postForEntity(
+                FASTAPI_URL + "/chat",
+                requestEntity,
+                Map.class
+        );
+        return response.getBody();
+    }
+
+    public Map<String, Object> getDemandForecast() {
+        ResponseEntity<Map> response = restTemplate.getForEntity(
+                FASTAPI_URL + "/forecast",
+                Map.class
+        );
+        return response.getBody();
+    }
 }

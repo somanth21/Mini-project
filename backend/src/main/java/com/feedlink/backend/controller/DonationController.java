@@ -109,4 +109,34 @@ public class DonationController {
 
         return ResponseEntity.ok(stats);
     }
+
+    @PostMapping("/{id}/generate-qr")
+    public ResponseEntity<Map<String, String>> generateQr(@PathVariable Long id) {
+        String token = service.generateVerificationToken(id);
+        String base64Image = "";
+        try {
+            com.google.zxing.qrcode.QRCodeWriter qrCodeWriter = new com.google.zxing.qrcode.QRCodeWriter();
+            com.google.zxing.common.BitMatrix bitMatrix = qrCodeWriter.encode(token, com.google.zxing.BarcodeFormat.QR_CODE, 200, 200);
+            java.io.ByteArrayOutputStream pngOutputStream = new java.io.ByteArrayOutputStream();
+            com.google.zxing.client.j2se.MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOutputStream);
+            byte[] pngData = pngOutputStream.toByteArray();
+            base64Image = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(pngData);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        Map<String, String> response = new HashMap<>();
+        response.put("token", token);
+        response.put("qrCodeImage", base64Image);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{id}/verify-qr")
+    public ResponseEntity<Donation> verifyQr(
+            @PathVariable Long id,
+            @RequestParam String token,
+            @AuthenticationPrincipal User user
+    ) {
+        return ResponseEntity.ok(service.verifyQrCode(id, token, user));
+    }
 }

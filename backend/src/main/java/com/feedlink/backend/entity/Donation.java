@@ -40,6 +40,9 @@ public class Donation {
 
     private LocalDateTime expiryTime;
     private LocalDateTime createdAt;
+    private LocalDateTime acceptedAt;
+    private LocalDateTime deliveredAt;
+    private String verificationToken;
     
     // AI Analysis results
     private Double freshnessScore;

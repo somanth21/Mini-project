@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Package, Map as MapIcon, History, TrendingUp, Search, CheckCircle2, User, Loader2, Sparkles } from 'lucide-react';
+import { Package, Map as MapIcon, History, TrendingUp, Search, CheckCircle2, User, Loader2, Sparkles, QrCode, X, Flame } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import axios from 'axios';
+import ImpactDashboard from '../components/ImpactDashboard';
 
 const NGODashboard = () => {
   const { user } = useAuth();
@@ -11,42 +12,19 @@ const NGODashboard = () => {
   const [selectedDonation, setSelectedDonation] = useState(null);
   const [donations, setDonations] = useState([]);
   const [myDonations, setMyDonations] = useState([]);
+  const [heatmapData, setHeatmapData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState({
-    availableDonations: 0,
-    acceptedDonations: 0,
-    mealsDistributed: 0,
-    activeVolunteers: 5
-  });
 
-  const haversine = (lat1, lon1, lat2, lon2) => {
-    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
-    const R = 6371; // km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  };
-
-  const selectedDistance = selectedDonation 
-    ? haversine(user?.latitude, user?.longitude, selectedDonation.latitude, selectedDonation.longitude)
-    : null;
+  const [showVerifyModal, setShowVerifyModal] = useState(false);
+  const [verifyDonationId, setVerifyDonationId] = useState(null);
+  const [verifyToken, setVerifyToken] = useState('');
+  const [expectedToken, setExpectedToken] = useState('');
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
+  const [verifySuccess, setVerifySuccess] = useState(false);
 
   const fetchStats = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (token) {
-        const response = await axios.get('http://localhost:8080/api/donations/ngo/stats', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setStats(response.data);
-      }
-    } catch (err) {
-      console.error('Error fetching NGO stats:', err);
-    }
+    // Relying on the dynamic ImpactDashboard for main KPIs
   };
 
   const fetchDonations = async () => {
@@ -64,6 +42,12 @@ const NGODashboard = () => {
           headers: { Authorization: `Bearer ${token}` }
         });
         setMyDonations(myRes.data);
+
+        // Fetch heatmap data
+        const heatRes = await axios.get('http://localhost:8080/api/maps/heatmap', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setHeatmapData(heatRes.data);
       }
     } catch (err) {
       console.error('Error fetching donations:', err);
@@ -71,9 +55,24 @@ const NGODashboard = () => {
   };
 
   useEffect(() => {
-    fetchStats();
     fetchDonations();
   }, []);
+
+  const haversine = (lat1, lon1, lat2, lon2) => {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  const selectedDistance = selectedDonation 
+    ? haversine(user?.latitude, user?.longitude, selectedDonation.latitude, selectedDonation.longitude)
+    : null;
 
   const handleAcceptDonation = async (donationId) => {
     setLoading(true);
@@ -83,7 +82,6 @@ const NGODashboard = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSelectedDonation(null);
-      fetchStats();
       fetchDonations();
     } catch (err) {
       console.error('Error accepting donation:', err);
@@ -93,26 +91,42 @@ const NGODashboard = () => {
     }
   };
 
-  const handleCompleteDelivery = async (donationId) => {
-    setLoading(true);
+  const handleOpenVerifyModal = (donation) => {
+    setVerifyDonationId(donation.id);
+    // Provide expected token for testing convenience
+    setExpectedToken(donation.verificationToken || `FEEDLINK-QR-${donation.id}-XXXX`);
+    setVerifyToken('');
+    setVerifyError('');
+    setVerifySuccess(false);
+    setShowVerifyModal(true);
+  };
+
+  const handleVerifySubmit = async (e) => {
+    e.preventDefault();
+    if (!verifyToken.trim()) return;
+    setVerifyLoading(true);
+    setVerifyError('');
     try {
       const token = localStorage.getItem('token');
-      await axios.patch(`http://localhost:8080/api/donations/${donationId}/status?status=DELIVERED`, {}, {
+      await axios.post(`http://localhost:8080/api/donations/${verifyDonationId}/verify-qr?token=${verifyToken.trim()}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      fetchStats();
-      fetchDonations();
+      setVerifySuccess(true);
+      setTimeout(() => {
+        setShowVerifyModal(false);
+        fetchDonations();
+      }, 1500);
     } catch (err) {
-      console.error('Error delivering donation:', err);
-      alert('Failed to update status to delivered.');
+      console.error('QR verification failed:', err);
+      setVerifyError(err.response?.data?.message || 'Invalid verification token. Please try again.');
     } finally {
-      setLoading(false);
+      setVerifyLoading(false);
     }
   };
 
   const mapCenter = user?.latitude && user?.longitude 
     ? [user.latitude, user.longitude] 
-    : [12.9716, 77.5946]; // Default to Bangalore center
+    : [17.4300, 78.4000]; // Default to Hyderabad center
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -125,52 +139,45 @@ const NGODashboard = () => {
         <div className="flex bg-slate-200/50 p-1 rounded-xl">
            <button 
              onClick={() => setActiveTab('map')}
-             className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all ${activeTab === 'map' ? 'bg-white shadow-sm text-brand-primary' : 'text-slate-500 hover:text-slate-700'}`}
+             className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all text-xs cursor-pointer ${activeTab === 'map' ? 'bg-white shadow-sm text-brand-primary' : 'text-slate-500 hover:text-slate-700'}`}
            >
-             <MapIcon size={18} />
+             <MapIcon size={16} />
              <span>Map View</span>
            </button>
            <button 
-             onClick={() => setActiveTab('list')}
-             className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all ${activeTab === 'list' ? 'bg-white shadow-sm text-brand-primary' : 'text-slate-500 hover:text-slate-700'}`}
+             onClick={() => setActiveTab('heatmap')}
+             className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all text-xs cursor-pointer ${activeTab === 'heatmap' ? 'bg-white shadow-sm text-brand-primary' : 'text-slate-500 hover:text-slate-700'}`}
            >
-             <History size={18} />
+             <Flame size={16} />
+             <span>Heatmap View</span>
+           </button>
+           <button 
+             onClick={() => setActiveTab('list')}
+             className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all text-xs cursor-pointer ${activeTab === 'list' ? 'bg-white shadow-sm text-brand-primary' : 'text-slate-500 hover:text-slate-700'}`}
+           >
+             <History size={16} />
              <span>Active Requests ({myDonations.filter(d => d.status === 'ACCEPTED').length})</span>
            </button>
         </div>
       </header>
 
+      {/* Real Impact Section */}
+      <ImpactDashboard />
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        {/* Sidebar Statistics */}
+        {/* Sidebar Info Card */}
         <div className="space-y-6">
-           <div className="card p-6 bg-gradient-to-br from-brand-primary to-emerald-600 text-white border-none">
-              <TrendingUp className="mb-4 opacity-80" />
-              <p className="text-sm font-medium opacity-80">Surplus Meals Rescued</p>
-              <h3 className="text-3xl font-bold">{stats.mealsDistributed}</h3>
-              <p className="text-xs mt-1 opacity-80">Total servings delivered to people</p>
-           </div>
-
-           <div className="card p-6">
-              <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Accepted Pickups</p>
-              <p className="text-2xl font-bold text-slate-900 mt-1">{stats.acceptedDonations}</p>
-           </div>
-
-           <div className="card p-6">
-              <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Available Surplus Nearby</p>
-              <p className="text-2xl font-bold text-brand-primary mt-1">{stats.availableDonations}</p>
-           </div>
-
-           <div className="card p-6">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Active Volunteers</h3>
+           <div className="card p-6 bg-slate-900 text-white rounded-3xl">
+              <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Active Volunteers</h3>
               <div className="space-y-3">
                  {[1, 2, 3].map(i => (
                     <div key={i} className="flex items-center gap-3">
-                       <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">
+                       <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-slate-300">
                          {String.fromCharCode(64+i)}
                        </div>
                        <div>
-                         <p className="text-sm font-bold text-slate-700">Volunteer {i}</p>
-                         <p className="text-[10px] text-emerald-500 font-bold uppercase">Active</p>
+                         <p className="text-sm font-bold">Volunteer {i}</p>
+                         <p className="text-[10px] text-emerald-400 font-bold uppercase">Active</p>
                        </div>
                     </div>
                  ))}
@@ -179,23 +186,23 @@ const NGODashboard = () => {
         </div>
 
         {/* Main Content Area */}
-        <div className="lg:col-span-3 card min-h-[600px] flex flex-col">
-          {activeTab === 'map' ? (
+        <div className="lg:col-span-3 card min-h-[550px] flex flex-col bg-white border border-slate-100 shadow-sm rounded-3xl overflow-hidden">
+          {activeTab === 'map' && (
             <div className="flex-grow relative rounded-xl overflow-hidden min-h-[500px]">
-               <MapContainer center={mapCenter} zoom={12} className="h-full w-full z-0 min-h-[500px]">
+               <MapContainer center={mapCenter} zoom={13} className="h-full w-full z-0 min-h-[500px]">
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   />
                   {donations.map(don => (
-                    <Marker key={don.id} position={[don.latitude || 12.9716, don.longitude || 77.5946]}>
+                    <Marker key={don.id} position={[don.latitude || 17.4300, don.longitude || 78.4000]}>
                       <Popup>
                         <div className="p-1 min-w-[150px]">
                           <p className="font-bold text-slate-950">{don.foodType}</p>
                           <p className="text-xs text-slate-600 mt-1 font-semibold">{don.quantity} servings</p>
                           <p className="text-[10px] text-slate-400 mt-0.5">{don.pickupAddress}</p>
                           <button 
-                            className="btn btn-primary w-full text-[10px] py-1.5 mt-2"
+                            className="btn btn-primary w-full text-[10px] py-1.5 mt-2 cursor-pointer"
                             onClick={() => setSelectedDonation(don)}
                           >
                             Select Donation
@@ -234,7 +241,7 @@ const NGODashboard = () => {
                     <button 
                       onClick={() => handleAcceptDonation(selectedDonation.id)} 
                       disabled={loading}
-                      className="btn btn-primary w-full py-3 flex items-center justify-center gap-2"
+                      className="btn btn-primary w-full py-3 flex items-center justify-center gap-2 cursor-pointer shadow-md text-xs"
                     >
                        {loading ? <Loader2 className="animate-spin" size={18} /> : <Package size={18} />}
                        <span>Accept Surplus & Dispatch Pickup</span>
@@ -242,7 +249,44 @@ const NGODashboard = () => {
                  </div>
                )}
             </div>
-          ) : (
+          )}
+
+          {activeTab === 'heatmap' && (
+            <div className="flex-grow relative rounded-xl overflow-hidden min-h-[500px]">
+               <MapContainer center={mapCenter} zoom={13} className="h-full w-full z-0 min-h-[500px]">
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  />
+                  {heatmapData.map((item, idx) => {
+                    const radius = Math.min(800, Math.max(150, item.foodWeight * 8));
+                    const color = item.foodWeight > 30 ? '#ef4444' : (item.foodWeight > 10 ? '#f97316' : '#eab308');
+                    return (
+                      <Circle
+                        key={idx}
+                        center={[item.latitude, item.longitude]}
+                        radius={radius}
+                        pathOptions={{ color, fillColor: color, fillOpacity: 0.35, weight: 1.5 }}
+                      >
+                        <Popup>
+                          <div className="p-2 space-y-1">
+                            <h4 className="font-bold text-xs text-slate-900">Neighborhood Density</h4>
+                            <p className="text-[10px] text-slate-600">Donations Count: <span className="font-bold">{item.donationCount}</span></p>
+                            <p className="text-[10px] text-slate-600">Total Food Wasted: <span className="font-bold">{item.foodWeight} kg</span></p>
+                            <p className="text-[10px] text-slate-600">Rescued Deliveries: <span className="font-bold">{item.completedDeliveries}</span></p>
+                            <span className="text-[8px] bg-slate-100 border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded-full inline-block mt-1 uppercase font-bold">
+                              {item.foodWeight > 30 ? 'High Hotspot' : 'Moderate Activity'}
+                            </span>
+                          </div>
+                        </Popup>
+                      </Circle>
+                    );
+                  })}
+               </MapContainer>
+            </div>
+          )}
+
+          {activeTab === 'list' && (
             <div className="p-8">
                <h3 className="text-xl font-bold text-slate-900 mb-6">Redistribution Log</h3>
                <div className="overflow-x-auto">
@@ -274,11 +318,11 @@ const NGODashboard = () => {
                          <td className="py-4">
                            {don.status === 'ACCEPTED' && (
                              <button
-                               onClick={() => handleCompleteDelivery(don.id)}
-                               className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                               onClick={() => handleOpenVerifyModal(don)}
+                               className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 cursor-pointer shadow-md"
                              >
-                               <CheckCircle2 size={12} />
-                               <span>Confirm Handover</span>
+                               <QrCode size={12} />
+                               <span>Scan / Verify Handover</span>
                              </button>
                            )}
                            {don.status === 'DELIVERED' && (
@@ -299,6 +343,76 @@ const NGODashboard = () => {
           )}
         </div>
       </div>
+
+      {/* QR Verification Modal */}
+      {showVerifyModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-slate-100 shadow-2xl relative space-y-4 animate-in zoom-in duration-300">
+            <button
+              onClick={() => setShowVerifyModal(false)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+            <div className="text-center">
+              <QrCode className="text-indigo-500 mx-auto" size={32} />
+              <h3 className="text-lg font-bold text-slate-800 mt-2">Verify Handover</h3>
+              <p className="text-xs text-slate-500 mt-1">Scan the QR code displayed on the Hotel and Hostals dashboard or enter the verification token.</p>
+            </div>
+
+            {verifySuccess ? (
+              <div className="py-6 text-center space-y-2 text-emerald-600 animate-pulse">
+                <CheckCircle2 className="mx-auto" size={40} />
+                <p className="font-bold text-sm">Verification Successful!</p>
+                <p className="text-xs text-slate-400">Donation delivery completed.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleVerifySubmit} className="space-y-4">
+                {verifyError && (
+                  <div className="p-3 bg-rose-50 text-rose-700 text-[10px] font-bold rounded-xl border border-rose-100">
+                    {verifyError}
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Verification Token</label>
+                  <input
+                    type="text"
+                    required
+                    value={verifyToken}
+                    onChange={(e) => setVerifyToken(e.target.value)}
+                    placeholder="FEEDLINK-QR-..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 font-mono"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                  <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Seeded Test Token</span>
+                  <div className="flex justify-between items-center mt-1">
+                    <code className="text-[10px] text-slate-600 font-bold select-all">{expectedToken}</code>
+                    <button
+                      type="button"
+                      onClick={() => setVerifyToken(expectedToken)}
+                      className="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-100 px-2 py-0.5 rounded-full font-bold hover:bg-indigo-100 cursor-pointer"
+                    >
+                      Use Test Token
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={verifyLoading}
+                  className="w-full bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold py-3 rounded-xl transition-all cursor-pointer shadow-lg shadow-indigo-500/10 flex items-center justify-center gap-1.5"
+                >
+                  {verifyLoading ? <Loader2 className="animate-spin" size={14} /> : <CheckCircle2 size={14} />}
+                  <span>Complete Verification</span>
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

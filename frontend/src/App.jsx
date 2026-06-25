@@ -5,6 +5,7 @@ import HotelDashboard from './pages/HotelDashboard';
 import NGODashboard from './pages/NGODashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import Navbar from './components/Navbar';
+import ChatbotWidget from './components/ChatbotWidget';
 import LandingPage from './pages/LandingPage';
 import { useAuth } from './hooks/useAuth';
 import { ProtectedRoute, RoleProtectedRoute } from './components/ProtectedRoute';
@@ -22,7 +23,7 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-slate-50 flex flex-col">
+      <div className="min-h-screen bg-slate-50 flex flex-col relative">
         <Navbar />
         <main className="flex-grow container mx-auto px-4 py-8">
           <Routes>
@@ -49,6 +50,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+        <ChatbotWidget />
       </div>
     </Router>
   );

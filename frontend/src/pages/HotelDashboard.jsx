@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Camera, Upload, CheckCircle2, AlertCircle, PieChart, Info, Package, Sparkles, MapPin, Heart, ArrowRight, RefreshCw, ThumbsUp } from 'lucide-react';
+import { Camera, Upload, CheckCircle2, AlertCircle, Info, Package, Sparkles, RefreshCw, ThumbsUp, QrCode, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import axios from 'axios';
+import ImpactDashboard from '../components/ImpactDashboard';
 
 const HotelDashboard = () => {
   const { user } = useAuth();
@@ -9,7 +10,6 @@ const HotelDashboard = () => {
   const [estimating, setEstimating] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   
-  // Custom interactive inputs after upload
   const [uploadedFile, setUploadedFile] = useState(null);
   const [foodType, setFoodType] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -19,31 +19,28 @@ const HotelDashboard = () => {
   
   const [donationStatus, setDonationStatus] = useState('IDLE'); // IDLE, ANALYZED, SUBMITTED
   const [error, setError] = useState('');
-  
-  const [stats, setStats] = useState({
-    activeDonations: 0,
-    mealsDonated: 0,
-    successfulPickups: 0,
-    ngosHelped: 0,
-    carbonSaved: 0
-  });
 
-  const fetchStats = async () => {
+  const [myDonations, setMyDonations] = useState([]);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [activeQrCode, setActiveQrCode] = useState('');
+  const [activeQrToken, setActiveQrToken] = useState('');
+
+  const fetchMyDonations = async () => {
     try {
       const token = localStorage.getItem('token');
       if (token) {
-        const response = await axios.get('http://localhost:8080/api/donations/hotel/stats', {
+        const response = await axios.get('http://localhost:8080/api/donations/my', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setStats(response.data);
+        setMyDonations(response.data);
       }
     } catch (err) {
-      console.error('Error fetching hotel stats:', err);
+      console.error('Error fetching donations:', err);
     }
   };
 
   useEffect(() => {
-    fetchStats();
+    fetchMyDonations();
   }, []);
 
   const handleFileUpload = async (e) => {
@@ -60,7 +57,6 @@ const HotelDashboard = () => {
     formData.append('file', file);
 
     try {
-      // Calls Spring Boot gateway endpoint
       const response = await axios.post('http://localhost:8080/api/ai/analyze-food', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -69,12 +65,10 @@ const HotelDashboard = () => {
       setAnalysisResult(result);
       setFoodType(result.foodType);
       
-      // Default guess for quantity
       const defaultQty = `10 portions`;
       setQuantity(defaultQty);
       setDonationStatus('ANALYZED');
       
-      // Run automatic servings and recommendation using default guess
       await runAiEstimation(file, defaultQty, result.foodType);
     } catch (err) {
       console.error('AI food analysis failed:', err);
@@ -95,7 +89,6 @@ const HotelDashboard = () => {
     formData.append('foodType', currentFoodType);
 
     try {
-      // 1. Serving Estimation
       const servingsRes = await axios.post('http://localhost:8080/api/ai/estimate-servings', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -104,10 +97,9 @@ const HotelDashboard = () => {
       setEstimatedServings(servingsData.estimatedServings);
       setServingConfidence(servingsData.confidence);
       
-      // 2. Fetch NGO Recommendations
       const recommendRes = await axios.post('http://localhost:8080/api/ai/recommend-ngos', {
-        latitude: user?.latitude || 12.9716,
-        longitude: user?.longitude || 77.5946,
+        latitude: user?.latitude || 17.4483,
+        longitude: user?.longitude || 78.3741,
         foodType: currentFoodType,
         estimatedServings: servingsData.estimatedServings
       });
@@ -116,8 +108,6 @@ const HotelDashboard = () => {
     } catch (err) {
       console.error('Serving estimation or recommendation failed:', err);
       setError('Serving estimation failed. Using raw numeric fallback.');
-      
-      // Simple fallback calculation
       const numMatch = currentQty.match(/\d+/);
       const val = numMatch ? parseInt(numMatch[0]) : 10;
       setEstimatedServings(val);
@@ -143,14 +133,14 @@ const HotelDashboard = () => {
         description: `Quality freshness score: ${analysisResult.freshnessScore}%. ${analysisResult.recommendation}. Estimated servings: ${estimatedServings}.`,
         freshnessScore: analysisResult.freshnessScore,
         AIRecommendation: analysisResult.recommendation,
-        latitude: user?.latitude || 12.9716,
-        longitude: user?.longitude || 77.5946,
-        pickupAddress: user?.address || 'Hotel Pickup Address'
+        latitude: user?.latitude || 17.4483,
+        longitude: user?.longitude || 78.3741,
+        pickupAddress: user?.address || 'Hotel and Hostal Pickup Address'
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setDonationStatus('SUBMITTED');
-      fetchStats();
+      fetchMyDonations();
     } catch (err) {
       console.error('Failed to submit donation:', err);
       setError('Failed to submit donation to the server.');
@@ -158,55 +148,40 @@ const HotelDashboard = () => {
     }
   };
 
+  const handleShowQr = async (donationId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(`http://localhost:8080/api/donations/${donationId}/generate-qr`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setActiveQrCode(response.data.qrCodeImage);
+      setActiveQrToken(response.data.token);
+      setShowQrModal(true);
+    } catch (err) {
+      console.error('Error generating QR code:', err);
+    }
+  };
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Hotel Dashboard</h1>
-          <p className="text-slate-500">Welcome back, {user?.name || 'Hotel Partner'}. Rescuing food waste using AI.</p>
-        </div>
-        <div className="flex flex-wrap gap-4">
-          <div className="card px-6 py-3 bg-emerald-50 border-emerald-100 flex items-center gap-3">
-             <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-white font-bold">{stats.mealsDonated}</div>
-             <div className="text-sm">
-                <p className="font-bold text-emerald-800">Surplus Meals Donated</p>
-                <p className="text-emerald-600 font-medium">To Date</p>
-             </div>
-          </div>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Hotel and Hostals Dashboard</h1>
+          <p className="text-slate-500">Welcome back, {user?.name || 'Partner'}. Rescuing food waste using AI.</p>
         </div>
       </header>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="card p-4 text-center">
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Active Donations</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{stats.activeDonations}</p>
-        </div>
-        <div className="card p-4 text-center">
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Meals Rescued</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{stats.mealsDonated}</p>
-        </div>
-        <div className="card p-4 text-center">
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Successful Pickups</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{stats.successfulPickups}</p>
-        </div>
-        <div className="card p-4 text-center">
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">NGOs Helped</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{stats.ngosHelped}</p>
-        </div>
-        <div className="card p-4 text-center bg-emerald-50 border-emerald-200 col-span-2 md:col-span-1">
-          <p className="text-xs text-emerald-700 uppercase tracking-wider font-bold">CO2 Savings</p>
-          <p className="text-2xl font-bold text-emerald-800 mt-1">{stats.carbonSaved} kg</p>
-        </div>
-      </div>
+      {/* Real Impact Section */}
+      <ImpactDashboard />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Donation Form */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="card p-8">
+        {/* Left Column: Form & History */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* New Donation Form */}
+          <div className="card p-8 bg-white border border-slate-100 shadow-sm rounded-3xl">
             <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-              <Package size={20} className="text-emerald-600" />
-              New Donation
+              <Package size={20} className="text-brand-primary" />
+              New Food Donation
             </h2>
 
             {error && <div className="p-4 bg-rose-50 text-rose-700 rounded-2xl text-xs font-semibold border border-rose-100 mb-4">{error}</div>}
@@ -216,13 +191,13 @@ const HotelDashboard = () => {
                 <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
                   <CheckCircle2 size={48} />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900">Donation Successful!</h3>
-                <p className="text-slate-500 max-w-sm mx-auto">
-                  Your surplus food has been registered. AI recommended NGOs have been compiled and matched.
+                <h3 className="text-2xl font-bold text-slate-900">Donation Registered!</h3>
+                <p className="text-slate-500 max-w-sm mx-auto text-xs">
+                  Your surplus food has been registered. NGOs have been notified and recommendation scores compiled.
                 </p>
                 <button 
                   onClick={() => {setDonationStatus('IDLE'); setAnalysisResult(null); setUploadedFile(null); setRecommendedNgos([]); setError('');}} 
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-all"
+                  className="bg-brand-primary hover:bg-emerald-600 text-white font-semibold px-6 py-2.5 rounded-xl transition-all cursor-pointer text-xs shadow-md"
                 >
                   Make Another Donation
                 </button>
@@ -233,18 +208,18 @@ const HotelDashboard = () => {
                 <div 
                   className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all ${
                     analyzing 
-                    ? 'border-emerald-500 bg-emerald-50/10' 
+                    ? 'border-brand-primary bg-emerald-50/10' 
                     : analysisResult 
                     ? 'border-emerald-200 bg-emerald-50/5' 
-                    : 'border-slate-300 hover:border-emerald-500'
+                    : 'border-slate-300 hover:border-brand-primary'
                   }`}
                 >
                   {!analysisResult ? (
                     <div className="space-y-4">
                       {analyzing ? (
                         <div className="flex flex-col items-center gap-4">
-                          <div className="w-12 h-12 border-4 border-emerald-600/20 border-t-emerald-600 rounded-full animate-spin" />
-                          <p className="text-emerald-700 font-medium animate-pulse text-sm">AI Food Recognition processing...</p>
+                          <div className="w-12 h-12 border-4 border-emerald-600/20 border-t-brand-primary rounded-full animate-spin" />
+                          <p className="text-brand-primary font-medium animate-pulse text-sm">AI Food Recognition processing...</p>
                         </div>
                       ) : (
                         <>
@@ -262,7 +237,7 @@ const HotelDashboard = () => {
                             onChange={handleFileUpload} 
                             accept="image/*"
                           />
-                          <label htmlFor="food-upload" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2.5 rounded-xl cursor-pointer inline-flex items-center gap-2 transition-all">
+                          <label htmlFor="food-upload" className="bg-brand-primary hover:bg-emerald-600 text-white font-semibold px-6 py-2.5 rounded-xl cursor-pointer inline-flex items-center gap-2 transition-all shadow-md">
                             <Upload size={18} />
                             <span>Browse Photo</span>
                           </label>
@@ -280,8 +255,8 @@ const HotelDashboard = () => {
                            )}
                         </div>
                         <div className="p-3.5 bg-emerald-50/50 border border-emerald-100 rounded-xl flex gap-2.5">
-                           <Info size={16} className="text-emerald-600 shrink-0 mt-0.5" />
-                           <p className="text-[11px] text-emerald-800 leading-relaxed">AI analysis is automated. Correct the values below if needed before submitting.</p>
+                           <Info size={16} className="text-brand-primary shrink-0 mt-0.5" />
+                           <p className="text-[11px] text-emerald-800 leading-relaxed font-medium">AI analysis is automated. Correct the values below if needed before submitting.</p>
                         </div>
                       </div>
                       
@@ -289,12 +264,12 @@ const HotelDashboard = () => {
                         <div className="space-y-1">
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Classification</label>
                           <div className="flex items-center gap-2">
-                            <p className="text-2xl font-extrabold text-slate-900">{analysisResult.foodType}</p>
+                            <p className="text-2xl font-extrabold text-slate-900">{foodType}</p>
                             <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                               <Sparkles size={12} /> {Math.round(analysisResult.confidence * 100)}% Match
                             </span>
                           </div>
-                          <p className="text-emerald-600 text-sm font-semibold">{analysisResult.category}</p>
+                          <p className="text-brand-primary text-sm font-semibold">{analysisResult.category}</p>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
@@ -311,7 +286,7 @@ const HotelDashboard = () => {
                                 {Math.round(servingConfidence * 100)}% Conf.
                               </span>
                             )}
-                            <p className="text-xl font-bold text-slate-900">{estimatedServings || analysisResult.servings}</p>
+                            <p className="text-xl font-bold text-slate-900">{estimatedServings}</p>
                           </div>
                         </div>
 
@@ -320,7 +295,6 @@ const HotelDashboard = () => {
                           <p className="text-xs text-emerald-700 leading-relaxed font-medium">{analysisResult.recommendation}</p>
                         </div>
 
-                        {/* Interactive Quantity Form */}
                         <form onSubmit={handleRecalculate} className="p-4 border border-slate-200 rounded-xl bg-slate-50/50 space-y-3">
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Modify Food Type & Quantity</label>
@@ -344,30 +318,29 @@ const HotelDashboard = () => {
                           <button 
                             type="submit" 
                             disabled={estimating} 
-                            className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-2 rounded-lg transition-all flex items-center justify-center gap-1.5"
+                            className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                           >
                             {estimating ? <RefreshCw className="animate-spin" size={12} /> : <RefreshCw size={12} />}
                             <span>Recalculate AI Servings & Match NGOs</span>
                           </button>
                         </form>
 
-                        {/* AI Recommended NGOs List */}
                         {recommendedNgos.length > 0 && (
                           <div className="space-y-2 animate-in fade-in duration-300">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                              <ThumbsUp size={12} className="text-emerald-600" /> Top AI NGO Recommendations
+                              <ThumbsUp size={12} className="text-brand-primary" /> Top AI NGO Recommendations
                             </label>
                             <div className="space-y-2">
                               {recommendedNgos.map((ngo, idx) => (
                                 <div key={ngo.id} className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between hover:border-emerald-600/30 transition-all shadow-sm">
                                   <div className="flex items-center gap-2.5">
-                                    <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-xs font-extrabold">{idx + 1}</div>
+                                    <div className="w-6 h-6 rounded-full bg-emerald-50 text-brand-primary flex items-center justify-center text-xs font-extrabold">{idx + 1}</div>
                                     <div>
                                       <p className="text-xs font-bold text-slate-800">{ngo.name}</p>
                                       <p className="text-[10px] text-slate-400">{ngo.distanceKm} km away • {ngo.capacity.toLowerCase()} capacity</p>
                                     </div>
                                   </div>
-                                  <span className="bg-emerald-50 text-emerald-700 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-100">
+                                  <span className="bg-emerald-50 text-brand-primary text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-100">
                                     {Math.round(ngo.score * 100)}% match
                                   </span>
                                 </div>
@@ -380,13 +353,13 @@ const HotelDashboard = () => {
                           <button 
                             onClick={submitDonation} 
                             disabled={donationStatus === 'SUBMITTING' || estimating}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold w-full py-4 rounded-xl transition-all shadow-lg shadow-emerald-600/10"
+                            className="bg-brand-primary hover:bg-emerald-600 text-white font-bold w-full py-4 rounded-xl transition-all shadow-lg shadow-emerald-600/10 cursor-pointer text-sm"
                           >
                             {donationStatus === 'SUBMITTING' ? 'Registering surplus...' : 'Confirm Surplus Donation'}
                           </button>
                           <button 
                             onClick={() => { setAnalysisResult(null); setUploadedFile(null); setRecommendedNgos([]); setError(''); }} 
-                            className="text-slate-400 text-xs font-semibold w-full text-center mt-3 hover:text-slate-600 transition-colors"
+                            className="text-slate-400 text-xs font-semibold w-full text-center mt-3 hover:text-slate-600 transition-colors cursor-pointer"
                           >
                             Cancel / Re-upload
                           </button>
@@ -398,42 +371,62 @@ const HotelDashboard = () => {
               </div>
             )}
           </div>
+
+          {/* My Donations List Section */}
+          <div className="card p-8 bg-white border border-slate-100 shadow-sm rounded-3xl">
+            <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+              <QrCode size={20} className="text-brand-primary" />
+              My Donations & Handover Verifications
+            </h2>
+
+            <div className="space-y-4">
+              {myDonations.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6">No donations created yet.</p>
+              ) : (
+                myDonations.map((d) => (
+                  <div key={d.id} className="p-4 border border-slate-100 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-800">{d.foodType}</h4>
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                          d.status === 'DELIVERED' 
+                            ? 'bg-emerald-50 border-emerald-100 text-emerald-700' 
+                            : d.status === 'ACCEPTED'
+                            ? 'bg-blue-50 border-blue-100 text-blue-700'
+                            : 'bg-slate-100 border-slate-200 text-slate-500'
+                        }`}>
+                          {d.status}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        {d.quantity} servings • {d.pickupAddress}
+                      </p>
+                      {d.ngo && (
+                        <p className="text-[10px] text-slate-500 font-medium mt-1">
+                          Matched Partner: {d.ngo.name}
+                        </p>
+                      )}
+                    </div>
+
+                    {d.status === 'ACCEPTED' && (
+                      <button
+                        onClick={() => handleShowQr(d.id)}
+                        className="btn btn-secondary flex items-center gap-1.5 text-xs py-2 px-3 border-indigo-200 text-indigo-600 hover:bg-indigo-50 cursor-pointer"
+                      >
+                        <QrCode size={14} />
+                        Get Handover QR
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Sidebar */}
+        {/* Right Column: Sidebar */}
         <div className="space-y-8">
-          <div className="card p-6">
-             <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                <PieChart size={20} className="text-emerald-600" />
-                Impact Summary
-             </h3>
-             <div className="space-y-4">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-500">Meals Donated</span>
-                  <span className="font-bold text-slate-900">{stats.mealsDonated} servings</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-500">Food Rescued</span>
-                  <span className="font-bold text-slate-900">{(stats.mealsDonated * 0.5).toFixed(1)} kg</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-500">CO2 Impact Avoided</span>
-                  <span className="font-bold text-emerald-600">{stats.carbonSaved} kg</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-500">NGOs Connected</span>
-                  <span className="font-bold text-blue-600">{stats.ngosHelped} partners</span>
-                </div>
-                <div className="pt-4 mt-4 border-t border-slate-100">
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                    <div className="bg-emerald-600 h-full" style={{ width: `${Math.min(100, (stats.mealsDonated / 200) * 100)}%` }} />
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-2 text-center uppercase tracking-widest font-bold">Progress toward 200 surplus meals</p>
-                </div>
-             </div>
-          </div>
-
-          <div className="card p-6 bg-slate-900 text-white">
+          <div className="card p-6 bg-slate-900 text-white rounded-3xl">
              <h3 className="text-lg font-bold mb-4">Safety & Guidelines</h3>
              <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
                <p><strong>1. Temperature Checks:</strong> Keep prepared meals below 4°C or above 60°C until pickup.</p>
@@ -443,6 +436,35 @@ const HotelDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* QR Code Modal */}
+      {showQrModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-slate-100 shadow-2xl relative text-center space-y-4 animate-in zoom-in duration-300">
+            <button
+              onClick={() => setShowQrModal(false)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+            <h3 className="text-lg font-bold text-slate-800">Verification Handover QR</h3>
+            <p className="text-xs text-slate-500">Show this QR code to the volunteer when they pick up the food packages.</p>
+            
+            <div className="w-48 h-48 bg-slate-100 mx-auto rounded-2xl flex items-center justify-center border border-slate-200 overflow-hidden">
+              {activeQrCode ? (
+                <img src={activeQrCode} alt="Handover QR" className="w-full h-full" />
+              ) : (
+                <span className="text-xs text-slate-400 animate-pulse">Generating...</span>
+              )}
+            </div>
+            
+            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-center">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Verification Token</span>
+              <code className="text-xs text-brand-primary font-bold block mt-1 select-all">{activeQrToken}</code>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

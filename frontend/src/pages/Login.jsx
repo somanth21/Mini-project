@@ -132,7 +132,7 @@ const Login = () => {
               Bridging the Gap Between Surplus & Hunger.
             </h1>
             <p className="text-emerald-100 text-sm leading-relaxed max-w-md">
-              FeedLink AI optimizes surplus food logistics, matching hotels and restaurants with local NGOs to minimize waste and feed those in need in real-time.
+              FeedLink AI optimizes surplus food logistics, matching hotels, hostels and restaurants with local NGOs to minimize waste and feed those in need in real-time.
             </p>
           </div>
 
@@ -149,7 +149,7 @@ const Login = () => {
             </div>
             <blockquote className="text-xs italic text-emerald-100/80">
               "We have cut our restaurant's food waste by 65% while supporting three local shelter houses." 
-              <span className="block mt-1 font-semibold not-italic text-white">— Grand Palace Hotel Manager</span>
+              <span className="block mt-1 font-semibold not-italic text-white">— Grand Palace Hotel and Hostals Manager</span>
             </blockquote>
           </div>
         </div>

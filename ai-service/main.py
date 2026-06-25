@@ -506,5 +506,287 @@ async def get_analytics_endpoint():
             "wasteTrends": {}
         }
 
+# --- FEATURE 1 & 7: CHATBOT & DEMAND FORECASTING ---
+import urllib.request
+from datetime import timedelta
+
+def call_gemini(system_prompt: str, user_message: str, history: list) -> str:
+    api_key = "AIzaSyCmRuIScRaAA1fTI9XpNpfgC2dTyVtCwPc"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    
+    contents = []
+    for item in history:
+        role = "user" if item.get("role") == "user" else "model"
+        contents.append({
+            "role": role,
+            "parts": [{"text": item.get("content", "")}]
+        })
+        
+    full_message = f"[SYSTEM CONTEXT]\n{system_prompt}\n\n[USER MESSAGE]\n{user_message}"
+    contents.append({
+        "role": "user",
+        "parts": [{"text": full_message}]
+    })
+    
+    payload = {
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 800
+        }
+    }
+    
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            res_data = json.loads(response.read().decode("utf-8"))
+            candidates = res_data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    return parts[0].get("text", "")
+            return "I couldn't process that response from Gemini."
+    except Exception as e:
+        print(f"Gemini API call failed: {e}. Using rule-based fallback.")
+        return get_fallback_rule_based_response(system_prompt, user_message)
+
+def get_fallback_rule_based_response(system_prompt: str, user_message: str) -> str:
+    msg = user_message.lower()
+    context_lines = system_prompt.split('\n')
+    active_donations_section = []
+    in_active = False
+    for line in context_lines:
+        if "Active Donations List" in line or "Pending Pickups List" in line:
+            in_active = True
+            continue
+        if in_active and line.strip() == "" and len(active_donations_section) > 1:
+            in_active = False
+        if in_active:
+            active_donations_section.append(line.strip())
+            
+    active_str = "\n".join(active_donations_section) if active_donations_section else "No active items found."
+    
+    if "active" in msg or "show my active" in msg or "pending" in msg:
+        return f"Here are your current active items from the system:\n{active_str}"
+    
+    if "how do i donate" in msg or "how to donate" in msg:
+        return ("To donate food, click 'New Donation' on your dashboard, upload a clear photo of the food. "
+                "Our AI will analyze freshness, estimate portions, and recommend the best local NGOs based on distance and capacity. "
+                "Once accepted by an NGO, a QR code will be generated for secure pickup verification.")
+                
+    if "meal" in msg or "donate" in msg or "history" in msg:
+        history_lines = []
+        in_history = False
+        for line in context_lines:
+            if "Donation History" in line:
+                in_history = True
+                continue
+            if in_history and line.strip() == "" and len(history_lines) > 1:
+                in_history = False
+            if in_history:
+                history_lines.append(line.strip())
+        history_str = "\n".join(history_lines) if history_lines else "No recent history found."
+        return f"Based on your profile, here is your summary history:\n{history_str}"
+        
+    if "stats" in msg or "statistics" in msg or "analytics" in msg:
+        stats_lines = []
+        in_stats = False
+        for line in context_lines:
+            if "System Statistics" in line or "Status" in line:
+                in_stats = True
+                continue
+            if in_stats and line.strip() == "" and len(stats_lines) > 1:
+                in_stats = False
+            if in_stats:
+                stats_lines.append(line.strip())
+        stats_str = "\n".join(stats_lines) if stats_lines else "Active platform tracking is fully operational."
+        return f"Here is the platform statistics overview:\n{stats_str}"
+
+    return ("Hello! I am your FeedLink AI Assistant. I can help you check active donations, "
+            "review pickup histories, show nearby NGO recommendations, and explain platform impact analytics. "
+            "What can I help you with today?")
+
+def log_conversation(conv_id: str, role: str, message: str, response: str):
+    log_entry = {
+        "conversationId": conv_id,
+        "role": role,
+        "userMessage": message,
+        "botResponse": response,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    if use_mongo:
+        try:
+            mongo_db["chatbot_conversations"].insert_one(log_entry)
+        except Exception as e:
+            print(f"Failed to log conversation to MongoDB: {e}")
+    else:
+        try:
+            conn = sqlite3.connect(SQLITE_DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS chatbot_conversations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    conversationId TEXT,
+                    role TEXT,
+                    userMessage TEXT,
+                    botResponse TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute(
+                "INSERT INTO chatbot_conversations (conversationId, role, userMessage, botResponse) VALUES (?, ?, ?, ?)",
+                (conv_id, role, message, response)
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Failed to log conversation to SQLite: {e}")
+
+class ChatPayload(BaseModel):
+    message: str
+    conversationId: str
+    role: str
+    userName: str
+    history: List[dict] = []
+    dbContext: str
+
+@app.post("/chat")
+async def chat_endpoint(payload: ChatPayload):
+    system_prompt = f"""
+You are FeedLink AI Assistant. You help hotels, hostals, NGOs, and volunteers distribute food and manage donations.
+You are talking to {payload.userName} who is logged in as a {payload.role}.
+
+Here is the actual real-time platform data context:
+{payload.dbContext}
+
+Answer the user's question clearly. Use the context data provided. Keep your answers concise, engaging, and professional.
+For hotels & hostals, answer how they can donate, show their active donations, total meals donated, history, or explain their food freshness.
+For NGOs, show nearby available donations, explain recommendations, show pending pickups, or delivery history.
+For Admin, explain analytics, stats, and NGO approvals.
+"""
+    response_text = call_gemini(system_prompt, payload.message, payload.history)
+    log_conversation(payload.conversationId, payload.role, payload.message, response_text)
+    return {
+        "response": response_text,
+        "conversationId": payload.conversationId
+    }
+
+def get_historical_data():
+    history = []
+    if use_mongo:
+        try:
+            cursor = mongo_db["serving_predictions"].find({})
+            for doc in cursor:
+                ts = doc.get("timestamp")
+                if isinstance(ts, str):
+                    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                else:
+                    dt = ts
+                history.append({
+                    "servings": doc.get("estimatedServings", 20),
+                    "datetime": dt
+                })
+        except Exception:
+            pass
+    if not history:
+        try:
+            conn = sqlite3.connect(SQLITE_DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT estimatedServings, timestamp FROM serving_predictions")
+            for row in cursor.fetchall():
+                try:
+                    dt = datetime.fromisoformat(row[1])
+                except Exception:
+                    dt = datetime.now()
+                history.append({
+                    "servings": row[0],
+                    "datetime": dt
+                })
+            conn.close()
+        except Exception:
+            pass
+    return history
+
+@app.get("/forecast")
+async def forecast_endpoint():
+    from sklearn.ensemble import RandomForestRegressor
+    history = get_historical_data()
+    
+    # Pre-train a default synthetic dataset of 60 days
+    X_train = []
+    y_train = []
+    
+    now = datetime.now()
+    for i in range(60):
+        dt = now - timedelta(days=i)
+        day_of_week = dt.weekday()
+        month = dt.month
+        is_weekend = 1 if day_of_week >= 5 else 0
+        
+        base = 35.0
+        if is_weekend:
+            base += 20.0
+        if month in [10, 11, 12]:
+            base += 15.0
+            
+        X_train.append([day_of_week, month, is_weekend])
+        y_train.append(base)
+        
+    for item in history:
+        dt = item["datetime"]
+        X_train.append([dt.weekday(), dt.month, 1 if dt.weekday() >= 5 else 0])
+        y_train.append(float(item["servings"]))
+        
+    reg = RandomForestRegressor(n_estimators=10, random_state=42)
+    reg.fit(X_train, y_train)
+    
+    tomorrow = now + timedelta(days=1)
+    tomorrow_features = [[tomorrow.weekday(), tomorrow.month, 1 if tomorrow.weekday() >= 5 else 0]]
+    expected_donations = float(reg.predict(tomorrow_features)[0])
+    expected_ngo_demand = expected_donations * 1.18
+    expected_surplus = expected_donations * 0.12
+    
+    prediction_result = {
+        "expectedDonationsTomorrow": round(expected_donations, 1),
+        "expectedNgoDemandTomorrow": round(expected_ngo_demand, 1),
+        "expectedFoodSurplusTomorrow": round(expected_surplus, 1),
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    
+    # Log prediction results to database
+    if use_mongo:
+        try:
+            mongo_db["demand_forecasts"].insert_one(prediction_result.copy())
+        except Exception:
+            pass
+    else:
+        try:
+            conn = sqlite3.connect(SQLITE_DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS demand_forecasts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    expectedDonations REAL,
+                    expectedNgoDemand REAL,
+                    expectedFoodSurplus REAL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute(
+                "INSERT INTO demand_forecasts (expectedDonations, expectedNgoDemand, expectedFoodSurplus) VALUES (?, ?, ?)",
+                (expected_donations, expected_ngo_demand, expected_surplus)
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+            
+    return prediction_result
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

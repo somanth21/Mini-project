@@ -116,7 +116,7 @@ const Register = () => {
                       : 'border-slate-200 text-slate-500 hover:border-slate-300'
                     }`}
                   >
-                    {r === 'HOTEL' ? 'Hotel / Restaurant' : 'NGO Partner'}
+                    {r === 'HOTEL' ? 'Hotel and Hostals' : 'NGO Partner'}
                   </button>
                 ))}
               </div>
@@ -199,14 +199,14 @@ const Register = () => {
 
             {formData.role === 'HOTEL' && (
               <div className="space-y-1.5 md:col-span-2 animate-in fade-in duration-300">
-                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Hotel / Restaurant Business Name</label>
+                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Hotel and Hostals Business Name</label>
                 <div className="relative">
                   <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input 
                     type="text" 
                     required 
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" 
-                    placeholder="e.g. Grand Palace Hotel"
+                    placeholder="e.g. Grand Palace Hotel and Hostals"
                     value={formData.hotelName}
                     onChange={(e) => setFormData({...formData, hotelName: e.target.value})}
                   />
