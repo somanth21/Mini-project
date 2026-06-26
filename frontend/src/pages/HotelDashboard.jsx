@@ -293,16 +293,16 @@ const HotelDashboard = () => {
                             </span>
                             {(() => {
                               const pct = Math.round(analysisResult.confidence * 100);
-                              let tier = "Low Confidence";
+                              let tier = "Low";
                               let color = "bg-rose-50 border-rose-200 text-rose-700";
                               if (pct >= 95) {
-                                tier = "Excellent";
+                                tier = "High";
                                 color = "bg-emerald-50 border-emerald-200 text-emerald-700";
                               } else if (pct >= 80) {
-                                tier = "High Confidence";
+                                tier = "Good";
                                 color = "bg-blue-50 border-blue-200 text-blue-700";
                               } else if (pct >= 60) {
-                                tier = "Moderate Confidence";
+                                tier = "Moderate";
                                 color = "bg-amber-50 border-amber-200 text-amber-700";
                               }
                               return (
@@ -315,7 +315,7 @@ const HotelDashboard = () => {
                           <p className="text-brand-primary text-sm font-semibold">{analysisResult.category}</p>
                           {analysisResult.confidence < 0.6 && (
                             <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-800 text-[11px] font-medium leading-relaxed mt-2">
-                              ⚠️ Low-confidence prediction. We recommend manual verification of the food type and quality.
+                              ⚠️ Low-confidence prediction. Manual verification recommended.
                             </div>
                           )}
                         </div>
@@ -333,7 +333,7 @@ const HotelDashboard = () => {
                             <div className="grid grid-cols-3 gap-2">
                               {analysisResult.top3Predictions.map((pred, i) => (
                                 <div key={i} className="p-2 bg-white border border-slate-150 rounded-lg text-center shadow-sm">
-                                  <p className="text-xs font-bold text-slate-700">{pred.foodType}</p>
+                                  <p className="text-xs font-bold text-slate-700">{pred.label || pred.foodType}</p>
                                   <p className="text-[10px] text-slate-400 mt-0.5">{Math.round(pred.confidence * 100)}% Match</p>
                                 </div>
                               ))}

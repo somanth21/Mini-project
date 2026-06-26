@@ -1,11 +1,13 @@
 package com.feedlink.backend.controller;
 
+import com.feedlink.backend.entity.Ngo;
 import com.feedlink.backend.entity.Donation;
 import com.feedlink.backend.entity.DonationStatus;
 import com.feedlink.backend.entity.Role;
 import com.feedlink.backend.entity.User;
 import com.feedlink.backend.repository.DonationRepository;
 import com.feedlink.backend.repository.UserRepository;
+import com.feedlink.backend.repository.NgoRepository;
 import com.feedlink.backend.service.AiService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +24,7 @@ public class ChatbotController {
     private final AiService aiService;
     private final DonationRepository donationRepository;
     private final UserRepository userRepository;
+    private final NgoRepository ngoRepository;
 
     @PostMapping("/message")
     public ResponseEntity<Map<String, Object>> handleMessage(
@@ -49,12 +52,19 @@ public class ChatbotController {
     }
 
     private String buildContextForUser(User user) {
+        List<String> approvedNgoNames = ngoRepository.findAll().stream()
+                .filter(ngo -> "APPROVED".equalsIgnoreCase(ngo.getApprovalStatus()))
+                .map(Ngo::getNgoName)
+                .toList();
+        String ngoNamesStr = String.join(", ", approvedNgoNames);
+
         StringBuilder sb = new StringBuilder();
         sb.append("User Details:\n");
         sb.append("- Name: ").append(user.getName()).append("\n");
         sb.append("- Email: ").append(user.getEmail()).append("\n");
         sb.append("- Role: ").append(user.getRole()).append("\n");
-        sb.append("- Address: ").append(user.getAddress()).append("\n\n");
+        sb.append("- Address: ").append(user.getAddress()).append("\n");
+        sb.append("- Platform Approved NGOs: ").append(ngoNamesStr).append("\n\n");
 
         if (user.getRole() == Role.HOTEL) {
             List<Donation> hotelDonations = donationRepository.findByDonor(user);
@@ -68,9 +78,14 @@ public class ChatbotController {
                     .mapToInt(d -> d.getQuantity() != null ? d.getQuantity() : 0)
                     .sum();
 
+            double carbonSaved = totalMeals * 1.25;
+            String dominantCategories = getDominantCategories(hotelDonations);
+
             sb.append("Your Donation Status:\n");
             sb.append("- Active Donations (AVAILABLE or ACCEPTED): ").append(activeCount).append("\n");
-            sb.append("- Total Meals Donated and Delivered: ").append(totalMeals).append("\n\n");
+            sb.append("- Total Meals Donated and Delivered: ").append(totalMeals).append("\n");
+            sb.append("- Total CO2 Saved: ").append(String.format("%.2f", carbonSaved)).append(" kg CO2\n");
+            sb.append("- Dominant Donation Categories: ").append(dominantCategories).append("\n\n");
             sb.append("Your Active Donations List:\n");
             hotelDonations.stream()
                     .filter(d -> d.getStatus() == DonationStatus.AVAILABLE || d.getStatus() == DonationStatus.ACCEPTED)
@@ -96,9 +111,14 @@ public class ChatbotController {
                     .mapToInt(d -> d.getQuantity() != null ? d.getQuantity() : 0)
                     .sum();
 
+            double carbonSaved = mealsDistributed * 1.25;
+            String dominantCategories = getDominantCategories(ngoDonations);
+
             sb.append("Your NGO Status:\n");
             sb.append("- Pending Pickups: ").append(pendingPickups).append("\n");
-            sb.append("- Total Meals Distributed: ").append(mealsDistributed).append("\n\n");
+            sb.append("- Total Meals Distributed: ").append(mealsDistributed).append("\n");
+            sb.append("- Total CO2 Saved: ").append(String.format("%.2f", carbonSaved)).append(" kg CO2\n");
+            sb.append("- Dominant Donation Categories: ").append(dominantCategories).append("\n\n");
             sb.append("Your Pending Pickups List:\n");
             ngoDonations.stream()
                     .filter(d -> d.getStatus() == DonationStatus.ACCEPTED || d.getStatus() == DonationStatus.PICKED_UP)
@@ -128,11 +148,20 @@ public class ChatbotController {
                     .filter(u -> u.getRole() == Role.NGO && "ACTIVE".equalsIgnoreCase(u.getAccountStatus()))
                     .count();
 
+            int totalMealsDelivered = donations.stream()
+                    .filter(d -> d.getStatus() == DonationStatus.DELIVERED)
+                    .mapToInt(d -> d.getQuantity() != null ? d.getQuantity() : 0)
+                    .sum();
+            double carbonSaved = totalMealsDelivered * 1.25;
+            String dominantCategories = getDominantCategories(donations);
+
             sb.append("System Statistics:\n");
             sb.append("- Total Donations Logged: ").append(totalDonations).append("\n");
             sb.append("- Active Hotels and Hostals: ").append(activeHotels).append("\n");
             sb.append("- Active NGOs: ").append(activeNgos).append("\n");
-            sb.append("- NGOs Pending Approval: ").append(pendingNgos).append("\n\n");
+            sb.append("- NGOs Pending Approval: ").append(pendingNgos).append("\n");
+            sb.append("- Total CO2 Saved System-wide: ").append(String.format("%.2f", carbonSaved)).append(" kg CO2\n");
+            sb.append("- Dominant Donation Categories System-wide: ").append(dominantCategories).append("\n\n");
             
             if (pendingNgos > 0) {
                 sb.append("NGOs Pending Approval List:\n");
@@ -142,5 +171,26 @@ public class ChatbotController {
             }
         }
         return sb.toString();
+    }
+
+    private String getDominantCategories(List<Donation> donations) {
+        Map<String, Long> counts = new HashMap<>();
+        for (Donation d : donations) {
+            if (d.getCategory() != null) {
+                counts.put(d.getCategory(), counts.getOrDefault(d.getCategory(), 0L) + 1);
+            }
+        }
+        List<Map.Entry<String, Long>> sorted = new ArrayList<>(counts.entrySet());
+        sorted.sort((a, b) -> b.getValue().compareTo(a.getValue()));
+        StringBuilder categoriesBuilder = new StringBuilder();
+        for (Map.Entry<String, Long> entry : sorted) {
+            categoriesBuilder.append(entry.getKey()).append(" (").append(entry.getValue()).append(" donations), ");
+        }
+        if (categoriesBuilder.length() > 2) {
+            categoriesBuilder.setLength(categoriesBuilder.length() - 2);
+        } else {
+            categoriesBuilder.append("None");
+        }
+        return categoriesBuilder.toString();
     }
 }

@@ -19,6 +19,9 @@ public class AIPredictionLog {
     private String category;
     private Double freshnessScore;
     private Integer estimatedServings;
+    private Double confidence;
+    private String imageUrl;
+    private String userEmail;
     @Column(length = 2000)
     private String predictionRaw;
     private LocalDateTime timestamp;

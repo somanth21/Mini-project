@@ -1,9 +1,11 @@
 package com.feedlink.backend.controller;
 
 import com.feedlink.backend.dto.*;
+import com.feedlink.backend.entity.User;
 import com.feedlink.backend.service.AiService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,10 +22,12 @@ public class AiController {
 
     @PostMapping("/analyze-food")
     public ResponseEntity<FoodAnalysisResponse> analyzeFood(
-            @RequestParam("file") MultipartFile file
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal User user
     ) {
         try {
-            return ResponseEntity.ok(aiService.analyzeFood(file));
+            String userEmail = user != null ? user.getEmail() : "anonymous";
+            return ResponseEntity.ok(aiService.analyzeFood(file, userEmail));
         } catch (IOException e) {
             return ResponseEntity.internalServerError().build();
         }
@@ -73,5 +77,27 @@ public class AiController {
     @GetMapping("/model-version")
     public ResponseEntity<Map<String, Object>> getModelVersion() {
         return ResponseEntity.ok(aiService.getModelVersion());
+    }
+
+    @GetMapping("/predictions")
+    public ResponseEntity<Map<String, Object>> getPredictions(
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "limit", defaultValue = "10") int limit,
+            @RequestParam(value = "search", required = false) String search,
+            @RequestParam(value = "foodType", required = false) String foodType,
+            @RequestParam(value = "category", required = false) String category,
+            @RequestParam(value = "userEmail", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(aiService.getPredictions(page, limit, search, foodType, category, userEmail));
+    }
+
+    @GetMapping("/ai-health")
+    public ResponseEntity<Map<String, Object>> getAiHealth() {
+        return ResponseEntity.ok(aiService.getAiHealth());
+    }
+
+    @GetMapping("/feedback-stats")
+    public ResponseEntity<Map<String, Object>> getFeedbackStats() {
+        return ResponseEntity.ok(aiService.getFeedbackStats());
     }
 }

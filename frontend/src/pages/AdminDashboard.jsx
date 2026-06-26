@@ -12,7 +12,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Users, Truck, CheckCircle, Loader2, Eye, Sparkles, Award, Flame, Download, Compass, ShieldAlert, Database, Cpu, GitBranch } from 'lucide-react';
+import { Users, Truck, CheckCircle, Loader2, Eye, Sparkles, Award, Flame, Download, Compass, ShieldAlert, Database, Cpu, GitBranch, Search, Filter } from 'lucide-react';
 import axios from 'axios';
 
 // Recharts imports for the AI Insights Center
@@ -42,6 +42,16 @@ ChartJS.register(
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'users', 'ai-insights', 'dataset', 'ai-logs'
+  const [predictionsList, setPredictionsList] = useState([]);
+  const [predPage, setPredPage] = useState(1);
+  const [predLimit, setPredLimit] = useState(10);
+  const [predTotal, setPredTotal] = useState(0);
+  const [predPages, setPredPages] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterFoodType, setFilterFoodType] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterUserEmail, setFilterUserEmail] = useState('');
+  const [aiHealth, setAiHealth] = useState(null);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalHotels: 0,
@@ -155,6 +165,14 @@ const AdminDashboard = () => {
         console.error('Error fetching model version:', mvErr);
       }
 
+      // 12. Fetch AI Health Telemetry
+      try {
+        const healthRes = await axios.get('http://localhost:8080/api/ai/ai-health', { headers });
+        setAiHealth(healthRes.data);
+      } catch (healthErr) {
+        console.error('Error fetching AI health:', healthErr);
+      }
+
     } catch (err) {
       console.error('Error fetching admin data:', err);
     }
@@ -163,6 +181,64 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  const downloadCSV = (data, filename = 'export.csv') => {
+    if (!data || data.length === 0) {
+      alert("No data available for export.");
+      return;
+    }
+    const headers = Object.keys(data[0]);
+    const csvRows = [
+      headers.join(','),
+      ...data.map(row => 
+        headers.map(fieldName => {
+          const val = row[fieldName];
+          return `"${String(val ?? '').replace(/"/g, '""')}"`;
+        }).join(',')
+      )
+    ];
+    const csvContent = "data:text/csv;charset=utf-8," + csvRows.map(row => encodeURIComponent(row)).join('\n');
+    const link = document.createElement("a");
+    link.setAttribute("href", csvContent);
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const fetchPredictions = async (page = 1) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      let url = `http://localhost:8080/api/ai/predictions?page=${page}&limit=${predLimit}`;
+      if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
+      if (filterFoodType) url += `&foodType=${encodeURIComponent(filterFoodType)}`;
+      if (filterCategory) url += `&category=${encodeURIComponent(filterCategory)}`;
+      if (filterUserEmail) url += `&userEmail=${encodeURIComponent(filterUserEmail)}`;
+      
+      const res = await axios.get(url, { headers });
+      setPredictionsList(res.data.predictions || []);
+      setPredPage(res.data.page || 1);
+      setPredTotal(res.data.total || 0);
+      setPredPages(res.data.pages || 1);
+    } catch (err) {
+      console.error('Error fetching paginated predictions:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'ai-logs') {
+      fetchPredictions(1);
+    }
+  }, [activeTab, searchQuery, filterFoodType, filterCategory, filterUserEmail]);
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= predPages) {
+      fetchPredictions(newPage);
+    }
+  };
 
   const handleApproveNgo = async (ngoId) => {
     setLoading(true);
@@ -525,6 +601,53 @@ const AdminDashboard = () => {
 
       {activeTab === 'ai-insights' && (
         <div className="space-y-8 animate-in fade-in duration-300">
+          {/* AI Health Telemetry Panel */}
+          {aiHealth && (
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <Cpu className="text-brand-primary" size={20} />
+                    AI Pipeline Telemetry & Health Status
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">Deep learning pipeline sanity checks, execution times, and fallback diagnostics.</p>
+                </div>
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  <span className="text-[10px] font-bold text-emerald-700">TensorFlow Pipeline: {aiHealth.tfStatus}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Pipeline Status</span>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className={`w-2.5 h-2.5 rounded-full ${aiHealth.tfStatus === 'Active' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                    <span className="text-sm font-bold text-slate-800">{aiHealth.tfStatus === 'Active' ? 'DL Pipeline Active' : 'Fallback Active'}</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">CV Fallback Usage</span>
+                  <span className="text-2xl font-black text-amber-600 mt-1 block">{aiHealth.fallbackUsagePercentage}%</span>
+                  <span className="text-[8px] text-slate-400 mt-1">Goal: &lt; 20% fallback rate</span>
+                </div>
+
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Prediction Success Rate</span>
+                  <span className="text-2xl font-black text-emerald-600 mt-1 block">{aiHealth.predictionSuccessRate}%</span>
+                  <span className="text-[8px] text-slate-400 mt-1">Percentage of logs with confidence &ge; 60%</span>
+                </div>
+
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Inference Timing</span>
+                  <span className="text-2xl font-black text-blue-600 mt-1 block">{aiHealth.inferenceTime}s</span>
+                  <span className="text-[8px] text-slate-400 mt-1">Average FastAPI execution latency</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* AI Model Performance Dashboard */}
           <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-6">
             <div>
@@ -947,42 +1070,163 @@ const AdminDashboard = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Latest Uploaded Samples Grid */}
+              {datasetStats.latestSamples && (
+                <div className="card p-8 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-900">Latest Uploaded Samples</h3>
+                      <p className="text-xs text-slate-400 mt-1">Recently classified food images and CNN confidence logs.</p>
+                    </div>
+                    <button
+                      onClick={() => downloadCSV(datasetStats.latestSamples, 'latest_uploaded_samples.csv')}
+                      className="btn bg-brand-primary hover:bg-brand-primary/95 text-white border-none flex items-center gap-1.5 text-xs py-2 px-4.5 cursor-pointer shadow-sm rounded-xl font-bold"
+                    >
+                      <Download size={14} />
+                      Export Samples to CSV
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                    {datasetStats.latestSamples.map((sample, idx) => (
+                      <div key={sample.id || idx} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col space-y-2.5">
+                        <div className="aspect-square bg-slate-205 rounded-xl overflow-hidden relative shadow-inner">
+                          {sample.imageUrl ? (
+                            <img src={sample.imageUrl} alt={sample.foodType} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-400 text-[10px]">No image</div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-800 truncate" title={sample.foodType}>{sample.foodType || 'Unknown'}</p>
+                          <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full inline-block mt-1">
+                            {Math.round(sample.confidence * 100)}% Match
+                          </span>
+                          <p className="text-[9px] text-slate-400 mt-1.5 font-medium">
+                            {sample.timestamp ? new Date(sample.timestamp).toLocaleDateString() : 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    {datasetStats.latestSamples.length === 0 && (
+                      <p className="text-xs text-slate-400 col-span-full text-center py-8">No image samples uploaded yet.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
       )}
 
       {activeTab === 'ai-logs' && (
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 gap-6 animate-in fade-in duration-300">
+          {/* Filters card */}
+          <div className="card bg-white border border-slate-100 shadow-sm rounded-3xl p-6 space-y-4">
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+              <Filter size={16} className="text-brand-primary" />
+              <span>Filter prediction logs</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                <input
+                  type="text"
+                  placeholder="Search food type or email..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="input input-sm pl-9 w-full bg-slate-50 border border-slate-205 text-slate-800 text-xs rounded-xl focus:bg-white transition-all py-2"
+                />
+              </div>
+
+              {/* Food Type Selector */}
+              <select
+                value={filterFoodType}
+                onChange={(e) => setFilterFoodType(e.target.value)}
+                className="select select-sm w-full bg-slate-50 border border-slate-205 text-slate-850 text-xs rounded-xl focus:bg-white transition-all py-2"
+              >
+                <option value="">All Food Types</option>
+                {["Chicken Biryani", "Veg Biryani", "Steamed Rice", "Fried Rice", "Roti/Naan", "Sliced Bread", "Chicken Curry", "Veg Curry", "Mixed Fruits", "Mixed Vegetables"].map(f => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+
+              {/* Category Selector */}
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="select select-sm w-full bg-slate-50 border border-slate-205 text-slate-850 text-xs rounded-xl focus:bg-white transition-all py-2"
+              >
+                <option value="">All Categories</option>
+                {["Prepared Meal", "Cooked Food", "Bakery", "Fresh Produce"].map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+
+              {/* CSV Downloader */}
+              <button
+                onClick={() => downloadCSV(predictionsList, 'prediction_history.csv')}
+                className="btn btn-sm bg-indigo-600 hover:bg-indigo-700 text-white border-none flex items-center gap-1.5 text-xs py-2 px-4 cursor-pointer rounded-xl font-bold"
+              >
+                <Download size={14} />
+                <span>Export to CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Predictions Table Card */}
           <div className="card overflow-hidden bg-white border border-slate-100 shadow-sm rounded-3xl">
-            <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-               <h3 className="text-xl font-bold text-slate-900">AI Recognition Prediction Logs</h3>
-               <p className="text-xs text-slate-500 mt-1">Audit log predictions from Python FastAPI TensorFlow/OpenCV stack</p>
+            <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+               <div>
+                  <h3 className="text-xl font-bold text-slate-900">AI Recognition Prediction Logs</h3>
+                  <p className="text-xs text-slate-500 mt-1">Audit log predictions from Python FastAPI TensorFlow/OpenCV stack</p>
+               </div>
+               <div className="text-xs text-slate-450 font-bold bg-slate-150 border border-slate-200 px-3 py-1 rounded-full">
+                 Total predictions: {predTotal}
+               </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-50">
                    <tr className="text-left text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                      <th className="px-8 py-4">Log ID</th>
-                      <th className="px-8 py-4">Food Surplus Item</th>
-                      <th className="px-8 py-4">Freshness Score</th>
-                      <th className="px-8 py-4">Servings</th>
+                      <th className="px-8 py-4">Image Preview</th>
+                      <th className="px-8 py-4">Surplus Item & Category</th>
+                      <th className="px-8 py-4">Confidence</th>
+                      <th className="px-8 py-4">Freshness</th>
+                      <th className="px-8 py-4">Uploader</th>
                       <th className="px-8 py-4">Timestamp</th>
                       <th className="px-8 py-4 text-right">Raw Output</th>
                    </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                   {aiLogs.map((log, idx) => (
+                   {predictionsList.map((log, idx) => (
                       <tr key={log.id || idx} className="hover:bg-slate-50/50 transition-colors">
-                         <td className="px-8 py-5 text-xs text-slate-500 font-mono">
-                           {log.id ? `${log.id.substring(0, 8)}...` : `LOG-${1000 + idx}`}
+                         <td className="px-8 py-5">
+                           <div className="w-12 h-12 bg-slate-100 rounded-xl overflow-hidden shadow-sm border border-slate-200">
+                             {log.imageUrl ? (
+                               <img src={log.imageUrl} alt={log.foodType} className="w-full h-full object-cover" />
+                             ) : (
+                               <div className="w-full h-full flex items-center justify-center text-slate-400 text-[10px]">No image</div>
+                             )}
+                           </div>
                          </td>
                          <td className="px-8 py-5">
                            <p className="font-bold text-slate-800">{log.foodType}</p>
                            <p className="text-[10px] text-emerald-600 font-bold">{log.category}</p>
                          </td>
+                         <td className="px-8 py-5">
+                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                             log.confidence >= 0.95 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                             log.confidence >= 0.80 ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                             log.confidence >= 0.60 ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                             'bg-rose-50 border-rose-200 text-rose-700'
+                           }`}>
+                             {Math.round(log.confidence * 100)}%
+                           </span>
+                         </td>
                          <td className="px-8 py-5 font-bold text-emerald-600">{log.freshnessScore}%</td>
-                         <td className="px-8 py-5 text-sm text-slate-700 font-semibold">{log.estimatedServings}</td>
+                         <td className="px-8 py-5 text-xs text-slate-500 font-medium">{log.userEmail || 'anonymous'}</td>
                          <td className="px-8 py-5 text-xs text-slate-400">{log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A'}</td>
                          <td className="px-8 py-5 text-right">
                            <button 
@@ -995,14 +1239,37 @@ const AdminDashboard = () => {
                          </td>
                       </tr>
                    ))}
-                   {aiLogs.length === 0 && (
+                   {predictionsList.length === 0 && (
                       <tr>
-                        <td colSpan="6" className="py-8 text-center text-slate-400">No AI predictions logged in database yet. Try uploading a food image on the Hotel and Hostals dashboard.</td>
+                        <td colSpan="7" className="py-8 text-center text-slate-400">No predictions matching filters logged in database.</td>
                       </tr>
                    )}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {predPages > 1 && (
+              <div className="flex justify-between items-center px-8 py-5 border-t border-slate-100 bg-slate-50/30">
+                <button
+                  disabled={predPage === 1}
+                  onClick={() => handlePageChange(predPage - 1)}
+                  className="btn btn-xs bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed rounded-lg py-1 px-3"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-slate-450 font-semibold">
+                  Page {predPage} of {predPages}
+                </span>
+                <button
+                  disabled={predPage === predPages}
+                  onClick={() => handlePageChange(predPage + 1)}
+                  className="btn btn-xs bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed rounded-lg py-1 px-3"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
 
           {showRawLog && (

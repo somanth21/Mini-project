@@ -21,4 +21,5 @@ public class FoodAnalysisResponse {
     private String explanation;
     private List<Map<String, Object>> top3Predictions;
     private double inferenceTime;
+    private String imageUrl;
 }
