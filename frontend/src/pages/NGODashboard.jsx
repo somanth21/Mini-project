@@ -23,6 +23,29 @@ const NGODashboard = () => {
   const [verifyError, setVerifyError] = useState('');
   const [verifySuccess, setVerifySuccess] = useState(false);
 
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [correctedLabel, setCorrectedLabel] = useState('');
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+
+  const handleFeedbackSubmit = async (e) => {
+    e.preventDefault();
+    if (!correctedLabel || !selectedDonation) return;
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post('http://localhost:8080/api/ai/feedback', {
+        originalPrediction: selectedDonation.foodType,
+        correctLabel: correctedLabel,
+        userRole: 'NGO'
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setFeedbackSubmitted(true);
+      setSelectedDonation(prev => ({ ...prev, foodType: correctedLabel }));
+    } catch (err) {
+      console.error('Failed to submit correction feedback:', err);
+    }
+  };
+
   const fetchStats = async () => {
     // Relying on the dynamic ImpactDashboard for main KPIs
   };
@@ -229,10 +252,51 @@ const NGODashboard = () => {
                             </span>
                           )}
                        </div>
-                       <button onClick={() => setSelectedDonation(null)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">×</button>
+                       <button onClick={() => { setSelectedDonation(null); setFeedbackSubmitted(false); setCorrectedLabel(''); setShowFeedbackForm(false); }} className="text-slate-400 hover:text-slate-600 text-lg font-bold">×</button>
                     </div>
                     <div className="space-y-3 mb-6">
                        <p className="text-xs text-slate-600 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">{selectedDonation.description}</p>
+                       
+                       <div className="p-3 border border-slate-150 rounded-xl bg-slate-50/50 space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Feedback Learning</span>
+                            {!feedbackSubmitted && (
+                              <button 
+                                type="button"
+                                onClick={() => setShowFeedbackForm(!showFeedbackForm)}
+                                className="text-indigo-600 hover:text-indigo-700 text-[10px] font-bold underline cursor-pointer"
+                              >
+                                {showFeedbackForm ? "Cancel" : "Incorrect label?"}
+                              </button>
+                            )}
+                          </div>
+                          {feedbackSubmitted ? (
+                            <p className="text-[10px] text-emerald-600 font-bold">✓ Correction recorded. Thanks!</p>
+                          ) : (
+                            showFeedbackForm && (
+                              <form onSubmit={handleFeedbackSubmit} className="flex gap-2 items-center mt-1 animate-in slide-in-from-top-2">
+                                <select 
+                                  value={correctedLabel}
+                                  onChange={(e) => setCorrectedLabel(e.target.value)}
+                                  className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-800 focus:outline-none flex-grow"
+                                >
+                                  <option value="">-- Correct label --</option>
+                                  {["Biryani", "Rice", "Bread", "Curry", "Fruits", "Vegetables"].map(label => (
+                                    <option key={label} value={label}>{label}</option>
+                                  ))}
+                                </select>
+                                <button 
+                                  type="submit" 
+                                  disabled={!correctedLabel}
+                                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold py-1.5 px-2.5 rounded-lg cursor-pointer border-none"
+                                >
+                                  Submit
+                                </button>
+                              </form>
+                            )
+                          )}
+                        </div>
+                       
                        <div className="flex items-center gap-2 text-xs text-slate-600">
                           <MapIcon size={14} className="text-brand-primary shrink-0" />
                           <span>Pickup: {selectedDonation.pickupAddress}</span>

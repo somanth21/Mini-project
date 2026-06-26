@@ -58,4 +58,20 @@ public class AiController {
     public ResponseEntity<Map<String, Object>> getDemandForecast() {
         return ResponseEntity.ok(aiService.getDemandForecast());
     }
+
+    @PostMapping("/feedback")
+    public ResponseEntity<Void> submitFeedback(@RequestBody Map<String, Object> feedback) {
+        aiService.submitFeedback(feedback);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/dataset-stats")
+    public ResponseEntity<Map<String, Object>> getDatasetStats() {
+        return ResponseEntity.ok(aiService.getDatasetStats());
+    }
+
+    @GetMapping("/model-version")
+    public ResponseEntity<Map<String, Object>> getModelVersion() {
+        return ResponseEntity.ok(aiService.getModelVersion());
+    }
 }

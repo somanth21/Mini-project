@@ -5,6 +5,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+import java.util.Map;
+
 @Data
 @Builder
 @AllArgsConstructor
@@ -15,4 +18,7 @@ public class FoodAnalysisResponse {
     private double confidence;
     private double freshnessScore;
     private String recommendation;
+    private String explanation;
+    private List<Map<String, Object>> top3Predictions;
+    private double inferenceTime;
 }

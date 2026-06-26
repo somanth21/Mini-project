@@ -149,4 +149,32 @@ public class AiService {
         );
         return response.getBody();
     }
+
+    public void submitFeedback(Map<String, Object> feedback) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(feedback, headers);
+
+        restTemplate.postForEntity(
+                FASTAPI_URL + "/feedback",
+                requestEntity,
+                Void.class
+        );
+    }
+
+    public Map<String, Object> getDatasetStats() {
+        ResponseEntity<Map> response = restTemplate.getForEntity(
+                FASTAPI_URL + "/dataset-stats",
+                Map.class
+        );
+        return response.getBody();
+    }
+
+    public Map<String, Object> getModelVersion() {
+        ResponseEntity<Map> response = restTemplate.getForEntity(
+                FASTAPI_URL + "/model-version",
+                Map.class
+        );
+        return response.getBody();
+    }
 }

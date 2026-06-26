@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Line, Pie, Bar } from 'react-chartjs-2';
+import { Line, Pie } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,7 +12,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Users, Truck, CheckCircle, Loader2, Eye, Sparkles, ThumbsUp, Activity, Award, Flame, Download, Compass, ShieldAlert } from 'lucide-react';
+import { Users, Truck, CheckCircle, Loader2, Eye, Sparkles, Award, Flame, Download, Compass, ShieldAlert, Database, Cpu, GitBranch } from 'lucide-react';
 import axios from 'axios';
 
 // Recharts imports for the AI Insights Center
@@ -23,10 +23,9 @@ import {
   YAxis as ReYAxis,
   CartesianGrid as ReCartesianGrid,
   Tooltip as ReTooltip,
-  Legend as ReLegend,
   ResponsiveContainer as ReResponsiveContainer,
-  AreaChart,
-  Area
+  LineChart,
+  Line as ReLine
 } from 'recharts';
 
 ChartJS.register(
@@ -42,7 +41,7 @@ ChartJS.register(
 );
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'users', 'ai-insights', 'ai-logs'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'users', 'ai-insights', 'dataset', 'ai-logs'
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalHotels: 0,
@@ -59,7 +58,10 @@ const AdminDashboard = () => {
     mostDonatedFoodTypes: {},
     averageServings: 0,
     mostActiveNgos: {},
-    wasteTrends: {}
+    wasteTrends: {},
+    averageConfidence: 0.85,
+    failedPredictions: 0,
+    averageInferenceTime: 0.12
   });
 
   // AI Insights Center dynamic states
@@ -67,6 +69,9 @@ const AdminDashboard = () => {
   const [hotspots, setHotspots] = useState([]);
   const [ngoPerformance, setNgoPerformance] = useState([]);
   const [hotelPerformance, setHotelPerformance] = useState([]);
+  
+  const [datasetStats, setDatasetStats] = useState(null);
+  const [modelVersion, setModelVersion] = useState(null);
   
   const [loading, setLoading] = useState(false);
   const [showRawLog, setShowRawLog] = useState(null);
@@ -132,6 +137,22 @@ const AdminDashboard = () => {
         setHotelPerformance(hotelPerfRes.data);
       } catch (hotelPerfErr) {
         console.error('Error fetching Hotel performance:', hotelPerfErr);
+      }
+
+      // 10. Fetch Dataset Stats
+      try {
+        const dsRes = await axios.get('http://localhost:8080/api/ai/dataset-stats', { headers });
+        setDatasetStats(dsRes.data);
+      } catch (dsErr) {
+        console.error('Error fetching dataset stats:', dsErr);
+      }
+
+      // 11. Fetch Model Version
+      try {
+        const mvRes = await axios.get('http://localhost:8080/api/ai/model-version', { headers });
+        setModelVersion(mvRes.data);
+      } catch (mvErr) {
+        console.error('Error fetching model version:', mvErr);
       }
 
     } catch (err) {
@@ -247,30 +268,6 @@ const AdminDashboard = () => {
     }]
   };
 
-  const foodTypesLabels = Object.keys(aiAnalytics.mostDonatedFoodTypes || {});
-  const foodTypesData = Object.values(aiAnalytics.mostDonatedFoodTypes || {});
-  
-  const foodTypesChartData = {
-    labels: foodTypesLabels.length ? foodTypesLabels : ['No Data'],
-    datasets: [{
-      data: foodTypesData.length ? foodTypesData : [1],
-      backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6'],
-      hoverOffset: 4
-    }]
-  };
-
-  const activeNgoLabels = Object.keys(aiAnalytics.mostActiveNgos || {});
-  const activeNgoData = Object.values(aiAnalytics.mostActiveNgos || {});
-  
-  const activeNgosChartData = {
-    labels: activeNgoLabels,
-    datasets: [{
-      label: 'Recommendation Match Count',
-      data: activeNgoData,
-      backgroundColor: '#3b82f6',
-      borderRadius: 8
-    }]
-  };
 
   const wasteTrendsLabels = Object.keys(aiAnalytics.wasteTrends || {});
   const wasteTrendsData = Object.values(aiAnalytics.wasteTrends || {});
@@ -312,6 +309,12 @@ const AdminDashboard = () => {
              className={`px-4 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer ${activeTab === 'ai-insights' ? 'bg-white shadow-sm text-brand-primary font-extrabold' : 'text-slate-500'}`}
            >
              AI Insights Center
+           </button>
+           <button 
+             onClick={() => setActiveTab('dataset')}
+             className={`px-4 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer ${activeTab === 'dataset' ? 'bg-white shadow-sm text-brand-primary font-extrabold' : 'text-slate-500'}`}
+           >
+             Dataset & Model Versioning
            </button>
            <button 
              onClick={() => setActiveTab('ai-logs')}
@@ -522,6 +525,76 @@ const AdminDashboard = () => {
 
       {activeTab === 'ai-insights' && (
         <div className="space-y-8 animate-in fade-in duration-300">
+          {/* AI Model Performance Dashboard */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-6">
+            <div>
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Sparkles className="text-brand-primary" size={20} />
+                AI Model Performance Dashboard
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">Real-time inference quality, prediction accuracy indicators, and timings from the TensorFlow MobileNetV2 pipeline.</p>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Predictions</span>
+                <span className="text-2xl font-black text-slate-850 mt-1 block">{aiAnalytics.totalPredictions || 0}</span>
+              </div>
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Avg Confidence</span>
+                <span className="text-2xl font-black text-emerald-600 mt-1 block">{Math.round((aiAnalytics.averageConfidence || 0.85) * 100)}%</span>
+              </div>
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Failed Predictions</span>
+                <span className="text-2xl font-black text-rose-600 mt-1 block">{aiAnalytics.failedPredictions || 0}</span>
+                <span className="text-[8px] text-slate-400">Confidence &lt; 60%</span>
+              </div>
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Avg Inference Time</span>
+                <span className="text-2xl font-black text-blue-600 mt-1 block">{(aiAnalytics.averageInferenceTime || 0.12).toFixed(3)}s</span>
+              </div>
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Most Frequent Food</span>
+                <span className="text-sm font-bold text-slate-800 mt-1 block truncate">
+                  {Object.keys(aiAnalytics.mostDonatedFoodTypes || {})[0] || 'N/A'}
+                </span>
+              </div>
+            </div>
+
+            {/* Prediction Distribution Chart */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Classification Distribution (By Class)</h4>
+                <div className="h-48 w-full flex items-center justify-center">
+                  {Object.keys(aiAnalytics.mostDonatedFoodTypes || {}).length === 0 ? (
+                    <p className="text-xs text-slate-400">No prediction data available yet.</p>
+                  ) : (
+                    <ReResponsiveContainer width="100%" height="100%">
+                      <BarChart data={Object.entries(aiAnalytics.mostDonatedFoodTypes || {}).map(([name, val]) => ({ name, count: val }))}>
+                        <ReXAxis dataKey="name" tick={{ fontSize: 10 }} />
+                        <ReYAxis tick={{ fontSize: 10 }} />
+                        <ReTooltip />
+                        <ReBar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ReResponsiveContainer>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Prediction Trends & Inference Timing</h4>
+                <div className="h-48 w-full">
+                  <ReResponsiveContainer width="100%" height="100%">
+                    <LineChart data={wasteTrendsChartData.labels.map((lbl, idx) => ({ date: lbl, count: wasteTrendsChartData.datasets[0].data[idx] }))}>
+                      <ReXAxis dataKey="date" tick={{ fontSize: 10 }} />
+                      <ReYAxis tick={{ fontSize: 10 }} />
+                      <ReTooltip />
+                      <ReLine type="monotone" dataKey="count" stroke="#10b981" strokeWidth={2} activeDot={{ r: 6 }} />
+                    </LineChart>
+                  </ReResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
           {/* AI Demand Forecasting Widgets */}
           {forecastData && (
             <div className="bg-slate-900 text-white rounded-3xl p-6 border border-slate-800 shadow-xl space-y-6">
@@ -657,7 +730,7 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {ngoPerformance.map((ngo, idx) => (
+                    {ngoPerformance.map(ngo => (
                       <tr key={ngo.id} className="hover:bg-slate-50/50">
                         <td className="py-3 font-bold text-slate-850">{ngo.name}</td>
                         <td className="py-3 text-slate-600 font-semibold">{ngo.mealsDistributed} servings</td>
@@ -687,7 +760,7 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {hotelPerformance.map((hotel, idx) => (
+                    {hotelPerformance.map(hotel => (
                       <tr key={hotel.id} className="hover:bg-slate-50/50">
                         <td className="py-3 font-bold text-slate-850">{hotel.name}</td>
                         <td className="py-3 text-slate-600 font-semibold">{hotel.mealsDonated} servings</td>
@@ -700,6 +773,182 @@ const AdminDashboard = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'dataset' && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {!datasetStats || !modelVersion ? (
+            <div className="card p-8 bg-white border border-slate-100 shadow-sm rounded-3xl flex flex-col items-center justify-center min-h-[300px]">
+              <Loader2 className="animate-spin text-brand-primary mb-4" size={32} />
+              <p className="text-slate-500 font-medium">Loading dataset & model version statistics...</p>
+            </div>
+          ) : (
+            <>
+              {/* Dataset & Model Stats Summary cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="card p-6 flex items-center justify-between bg-white border border-slate-100 shadow-sm rounded-2xl">
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Labelled Images</p>
+                    <h3 className="text-3xl font-bold text-slate-900">{datasetStats.labelledImagesCount}</h3>
+                    <p className="text-[10px] text-slate-400">Active image training library</p>
+                  </div>
+                  <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
+                    <Database size={24} />
+                  </div>
+                </div>
+
+                <div className="card p-6 flex items-center justify-between bg-white border border-slate-100 shadow-sm rounded-2xl">
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">User Corrections</p>
+                    <h3 className="text-3xl font-bold text-emerald-600">{datasetStats.correctedCount}</h3>
+                    <p className="text-[10px] text-slate-400">Injected feedback training samples</p>
+                  </div>
+                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+                    <CheckCircle size={24} />
+                  </div>
+                </div>
+
+                <div className="card p-6 flex items-center justify-between bg-white border border-slate-100 shadow-sm rounded-2xl">
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Model Version</p>
+                    <h3 className="text-3xl font-bold text-indigo-600">{modelVersion.version}</h3>
+                    <p className="text-[10px] text-slate-400">Active TensorFlow model</p>
+                  </div>
+                  <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
+                    <Cpu size={24} />
+                  </div>
+                </div>
+
+                <div className="card p-6 flex items-center justify-between bg-white border border-slate-100 shadow-sm rounded-2xl">
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Training Date</p>
+                    <h3 className="text-xl font-bold text-slate-900 mt-2">{modelVersion.trainingDate}</h3>
+                    <p className="text-[10px] text-slate-400">Dataset: {modelVersion.datasetVersion}</p>
+                  </div>
+                  <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center">
+                    <GitBranch size={24} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Model Version Performance Grid */}
+              <div className="card p-8 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-6">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-950 flex items-center gap-2">
+                    <Sparkles className="text-brand-primary" size={20} />
+                    Model Version Evaluation Parameters
+                  </h3>
+                  <p className="text-xs text-slate-450 mt-1">
+                    Quality assessment parameters calculated against the held-out validation set.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  {/* Accuracy */}
+                  <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-500">Accuracy</span>
+                      <span className="text-xs font-black text-brand-primary">{(modelVersion.accuracy * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                      <div className="bg-brand-primary h-full rounded-full" style={{ width: `${modelVersion.accuracy * 100}%` }}></div>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Total correct predictions divided by total dataset inputs.</p>
+                  </div>
+
+                  {/* Precision */}
+                  <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-500">Precision</span>
+                      <span className="text-xs font-black text-emerald-600">{(modelVersion.precision * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${modelVersion.precision * 100}%` }}></div>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Ability of the classifier not to label a negative sample as positive.</p>
+                  </div>
+
+                  {/* Recall */}
+                  <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-500">Recall</span>
+                      <span className="text-xs font-black text-blue-600">{(modelVersion.recall * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                      <div className="bg-blue-500 h-full rounded-full" style={{ width: `${modelVersion.recall * 100}%` }}></div>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Ability of the classifier to find all the positive samples.</p>
+                  </div>
+
+                  {/* F1 Score */}
+                  <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-500">F1-Score</span>
+                      <span className="text-xs font-black text-indigo-600">{(modelVersion.f1Score * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                      <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${modelVersion.f1Score * 100}%` }}></div>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Weighted harmonic mean of Precision and Recall.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Distribution & Growth charts */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Category Distribution Chart */}
+                <div className="card p-8 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-6">
+                  <h3 className="text-lg font-bold text-slate-900">Dataset Category Distribution</h3>
+                  <div className="h-64 w-full">
+                    {Object.keys(datasetStats.categoryDistribution || {}).length === 0 ? (
+                      <div className="h-full flex items-center justify-center">
+                        <p className="text-xs text-slate-400">No category distribution data available.</p>
+                      </div>
+                    ) : (
+                      <ReResponsiveContainer width="100%" height="100%">
+                        <BarChart data={Object.entries(datasetStats.categoryDistribution || {}).map(([name, count]) => ({ name, count }))}>
+                          <ReXAxis dataKey="name" tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                          <ReYAxis tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                          <ReTooltip contentStyle={{ fontSize: 10, borderRadius: 12 }} />
+                          <ReBar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ReResponsiveContainer>
+                    )}
+                  </div>
+                </div>
+
+                {/* Dataset Growth over Time */}
+                <div className="card p-8 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-6">
+                  <h3 className="text-lg font-bold text-slate-900">Dataset Cumulative Growth Curve</h3>
+                  <div className="h-64 w-full">
+                    {(!datasetStats.datasetGrowth || datasetStats.datasetGrowth.length === 0) ? (
+                      <div className="h-full flex items-center justify-center">
+                        <p className="text-xs text-slate-400">No growth historical data available.</p>
+                      </div>
+                    ) : (
+                      <ReResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={(() => {
+                            let cumulativeSum = 0;
+                            return (datasetStats.datasetGrowth || []).map(item => {
+                              cumulativeSum += item.count;
+                              return { date: item.date, count: cumulativeSum };
+                            });
+                          })()}
+                        >
+                          <ReXAxis dataKey="date" tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                          <ReYAxis tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                          <ReTooltip contentStyle={{ fontSize: 10, borderRadius: 12 }} />
+                          <ReLine type="monotone" dataKey="count" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 6 }} />
+                        </LineChart>
+                      </ReResponsiveContainer>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

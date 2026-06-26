@@ -25,6 +25,29 @@ const HotelDashboard = () => {
   const [activeQrCode, setActiveQrCode] = useState('');
   const [activeQrToken, setActiveQrToken] = useState('');
 
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [correctedLabel, setCorrectedLabel] = useState('');
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+
+  const handleFeedbackSubmit = async (e) => {
+    e.preventDefault();
+    if (!correctedLabel) return;
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post('http://localhost:8080/api/ai/feedback', {
+        originalPrediction: analysisResult?.foodType || foodType,
+        correctLabel: correctedLabel,
+        userRole: 'HOTEL'
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setFeedbackSubmitted(true);
+      setFoodType(correctedLabel);
+    } catch (err) {
+      console.error('Failed to submit correction feedback:', err);
+    }
+  };
+
   const fetchMyDonations = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -196,7 +219,7 @@ const HotelDashboard = () => {
                   Your surplus food has been registered. NGOs have been notified and recommendation scores compiled.
                 </p>
                 <button 
-                  onClick={() => {setDonationStatus('IDLE'); setAnalysisResult(null); setUploadedFile(null); setRecommendedNgos([]); setError('');}} 
+                  onClick={() => {setDonationStatus('IDLE'); setAnalysisResult(null); setUploadedFile(null); setRecommendedNgos([]); setError(''); setFeedbackSubmitted(false); setCorrectedLabel(''); setShowFeedbackForm(false);}} 
                   className="bg-brand-primary hover:bg-emerald-600 text-white font-semibold px-6 py-2.5 rounded-xl transition-all cursor-pointer text-xs shadow-md"
                 >
                   Make Another Donation
@@ -262,14 +285,100 @@ const HotelDashboard = () => {
                       
                       <div className="space-y-5">
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Classification</label>
-                          <div className="flex items-center gap-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">AI Classification</label>
+                          <div className="flex flex-wrap items-center gap-2">
                             <p className="text-2xl font-extrabold text-slate-900">{foodType}</p>
-                            <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
                               <Sparkles size={12} /> {Math.round(analysisResult.confidence * 100)}% Match
                             </span>
+                            {(() => {
+                              const pct = Math.round(analysisResult.confidence * 100);
+                              let tier = "Low Confidence";
+                              let color = "bg-rose-50 border-rose-200 text-rose-700";
+                              if (pct >= 95) {
+                                tier = "Excellent";
+                                color = "bg-emerald-50 border-emerald-200 text-emerald-700";
+                              } else if (pct >= 80) {
+                                tier = "High Confidence";
+                                color = "bg-blue-50 border-blue-200 text-blue-700";
+                              } else if (pct >= 60) {
+                                tier = "Moderate Confidence";
+                                color = "bg-amber-50 border-amber-200 text-amber-700";
+                              }
+                              return (
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${color}`}>
+                                  {tier}
+                                </span>
+                              );
+                            })()}
                           </div>
                           <p className="text-brand-primary text-sm font-semibold">{analysisResult.category}</p>
+                          {analysisResult.confidence < 0.6 && (
+                            <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-800 text-[11px] font-medium leading-relaxed mt-2">
+                              ⚠️ Low-confidence prediction. We recommend manual verification of the food type and quality.
+                            </div>
+                          )}
+                        </div>
+
+                        {analysisResult.explanation && (
+                          <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Reasoning (Explainability)</p>
+                            <p className="text-xs text-slate-600 leading-relaxed italic">"{analysisResult.explanation}"</p>
+                          </div>
+                        )}
+
+                        {analysisResult.top3Predictions && (
+                          <div className="space-y-1.5">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Alternative Predictions</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              {analysisResult.top3Predictions.map((pred, i) => (
+                                <div key={i} className="p-2 bg-white border border-slate-150 rounded-lg text-center shadow-sm">
+                                  <p className="text-xs font-bold text-slate-700">{pred.foodType}</p>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">{Math.round(pred.confidence * 100)}% Match</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="p-3.5 border border-slate-150 rounded-xl bg-slate-50/20 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Prediction Quality Feedback</span>
+                            {!feedbackSubmitted && (
+                              <button 
+                                type="button"
+                                onClick={() => setShowFeedbackForm(!showFeedbackForm)}
+                                className="text-indigo-600 hover:text-indigo-700 text-xs font-bold underline cursor-pointer"
+                              >
+                                {showFeedbackForm ? "Cancel" : "Incorrect prediction?"}
+                              </button>
+                            )}
+                          </div>
+                          {feedbackSubmitted ? (
+                            <p className="text-xs text-emerald-600 font-bold flex items-center gap-1">✓ Thank you! Correction recorded to retrain the AI.</p>
+                          ) : (
+                            showFeedbackForm && (
+                              <form onSubmit={handleFeedbackSubmit} className="flex gap-2 items-center mt-1 animate-in slide-in-from-top-2">
+                                <select 
+                                  value={correctedLabel}
+                                  onChange={(e) => setCorrectedLabel(e.target.value)}
+                                  className="bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none flex-grow"
+                                >
+                                  <option value="">-- Select Correct Food Type --</option>
+                                  {["Biryani", "Rice", "Bread", "Curry", "Fruits", "Vegetables"].map(label => (
+                                    <option key={label} value={label}>{label}</option>
+                                  ))}
+                                </select>
+                                <button 
+                                  type="submit" 
+                                  disabled={!correctedLabel}
+                                  className="btn bg-indigo-600 hover:bg-indigo-700 border-none text-white text-xs font-bold py-2 px-3 rounded-lg cursor-pointer"
+                                >
+                                  Submit
+                                </button>
+                              </form>
+                            )
+                          )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
@@ -297,7 +406,7 @@ const HotelDashboard = () => {
 
                         <form onSubmit={handleRecalculate} className="p-4 border border-slate-200 rounded-xl bg-slate-50/50 space-y-3">
                           <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Modify Food Type & Quantity</label>
+                            <label className="text-[10px] font-bold text-slate-505 uppercase tracking-wider">Modify Food Type & Quantity</label>
                             <div className="grid grid-cols-2 gap-2 mt-1">
                               <input 
                                 type="text"
@@ -358,7 +467,7 @@ const HotelDashboard = () => {
                             {donationStatus === 'SUBMITTING' ? 'Registering surplus...' : 'Confirm Surplus Donation'}
                           </button>
                           <button 
-                            onClick={() => { setAnalysisResult(null); setUploadedFile(null); setRecommendedNgos([]); setError(''); }} 
+                            onClick={() => { setAnalysisResult(null); setUploadedFile(null); setRecommendedNgos([]); setError(''); setFeedbackSubmitted(false); setCorrectedLabel(''); setShowFeedbackForm(false); }} 
                             className="text-slate-400 text-xs font-semibold w-full text-center mt-3 hover:text-slate-600 transition-colors cursor-pointer"
                           >
                             Cancel / Re-upload
