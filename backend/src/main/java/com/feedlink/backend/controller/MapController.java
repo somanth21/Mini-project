@@ -2,7 +2,10 @@ package com.feedlink.backend.controller;
 
 import com.feedlink.backend.entity.Donation;
 import com.feedlink.backend.entity.DonationStatus;
+import com.feedlink.backend.entity.Role;
+import com.feedlink.backend.entity.User;
 import com.feedlink.backend.repository.DonationRepository;
+import com.feedlink.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +18,8 @@ import java.util.*;
 public class MapController {
 
     private final DonationRepository donationRepository;
+    private final UserRepository userRepository;
+
 
     @GetMapping("/heatmap")
     public ResponseEntity<List<Map<String, Object>>> getHeatmapData() {
@@ -52,4 +57,22 @@ public class MapController {
         
         return ResponseEntity.ok(new ArrayList<>(coordGroup.values()));
     }
+
+    @GetMapping("/ngos")
+    public ResponseEntity<List<Map<String, Object>>> getActiveNgoLocations() {
+        List<User> users = userRepository.findAll();
+        List<Map<String, Object>> ngoLocations = new ArrayList<>();
+        for (User u : users) {
+            if (u.getRole() == Role.NGO && "ACTIVE".equalsIgnoreCase(u.getAccountStatus())) {
+                Map<String, Object> map = new HashMap<>();
+                map.put("name", u.getName());
+                map.put("latitude", u.getLatitude() != null ? u.getLatitude() : 17.4411);
+                map.put("longitude", u.getLongitude() != null ? u.getLongitude() : 78.3826);
+                map.put("address", u.getAddress());
+                ngoLocations.add(map);
+            }
+        }
+        return ResponseEntity.ok(ngoLocations);
+    }
 }
+

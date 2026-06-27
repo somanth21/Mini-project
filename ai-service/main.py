@@ -53,6 +53,8 @@ if not use_mongo:
             imageUrl TEXT,
             userEmail TEXT,
             fallbackUsed INTEGER,
+            top3Predictions TEXT,
+            estimatedServings INTEGER DEFAULT 15,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -85,12 +87,25 @@ if not use_mongo:
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    
+    # Run migrations for existing SQLite databases
+    try:
+        cursor.execute("ALTER TABLE food_analysis ADD COLUMN top3Predictions TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE food_analysis ADD COLUMN estimatedServings INTEGER DEFAULT 15")
+    except Exception:
+        pass
+        
     conn.commit()
     conn.close()
+
 
 # --- TENSORFLOW CORE INTEGRATION ---
 HAS_TF = False
 model = None
+MODEL_LOAD_TIME = 0.0
 
 try:
     import tensorflow as tf
@@ -158,6 +173,7 @@ def create_and_save_model():
 
 if HAS_TF:
     try:
+        start_load_time = time.time()
         model_path = "food_model.h5"
         # Validate that the model shape matches 10 classes
         if os.path.exists(model_path):
@@ -174,13 +190,15 @@ if HAS_TF:
             model = create_and_save_model()
         else:
             model = tf.keras.models.load_model(model_path)
-        print("TensorFlow MobileNetV2 model loaded successfully.")
+        MODEL_LOAD_TIME = round(time.time() - start_load_time, 4)
+        print(f"TensorFlow MobileNetV2 model loaded successfully in {MODEL_LOAD_TIME} seconds.")
     except Exception as e:
         print(f"Failed to load TensorFlow model: {e}")
         model = None
 
+
 # --- HELPER LOGGER FUNCTIONS ---
-def log_food_analysis(food_type: str, category: str, confidence: float, freshness: float = 85.0, explanation: str = "", inference_time: float = 0.0, image_url: str = "", user_email: str = "", fallback_used: bool = False):
+def log_food_analysis(food_type: str, category: str, confidence: float, freshness: float = 85.0, explanation: str = "", inference_time: float = 0.0, image_url: str = "", user_email: str = "", fallback_used: bool = False, top3_predictions: list = None, estimated_servings: int = 15):
     if use_mongo:
         try:
             mongo_db["food_analysis"].insert_one({
@@ -193,6 +211,8 @@ def log_food_analysis(food_type: str, category: str, confidence: float, freshnes
                 "imageUrl": image_url,
                 "userEmail": user_email or "anonymous",
                 "fallbackUsed": 1 if fallback_used else 0,
+                "top3Predictions": top3_predictions or [],
+                "estimatedServings": estimated_servings,
                 "timestamp": datetime.utcnow()
             })
         except Exception as e:
@@ -202,13 +222,14 @@ def log_food_analysis(food_type: str, category: str, confidence: float, freshnes
             conn = sqlite3.connect(SQLITE_DB_PATH)
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO food_analysis (foodType, category, confidence, freshnessScore, explanation, inferenceTime, imageUrl, userEmail, fallbackUsed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (food_type, category, confidence, freshness, explanation, inference_time, image_url, user_email or "anonymous", 1 if fallback_used else 0)
+                "INSERT INTO food_analysis (foodType, category, confidence, freshnessScore, explanation, inferenceTime, imageUrl, userEmail, fallbackUsed, top3Predictions, estimatedServings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (food_type, category, confidence, freshness, explanation, inference_time, image_url, user_email or "anonymous", 1 if fallback_used else 0, json.dumps(top3_predictions or []), estimated_servings)
             )
             conn.commit()
             conn.close()
         except Exception as e:
             print(f"Failed to log to SQLite: {e}")
+
 
 def log_ngo_recommendations(recommended_ngos: list, food_type: str, servings: int):
     if use_mongo:
@@ -285,30 +306,31 @@ def log_serving_prediction(estimated_servings: int, confidence: float, quantity_
             print(f"Failed to log serving prediction to SQLite: {e}")
 
 # --- AI CORE PIPELINE ---
-def generate_explanation(food_type: str, confidence: float, white_pct: float, green_pct: float, yellow_orange_pct: float, red_pct: float, brown_pct: float, variance: float) -> str:
+def generate_explanation(food_type: str, confidence: float, white_pct: float, green_pct: float, yellow_orange_pct: float, red_pct: float, brown_pct: float, variance: float, edge_density: float) -> str:
     conf_pct = f"{confidence * 100:.1f}%"
     if food_type == "Chicken Biryani":
-        return f"The model detected yellow-orange spice coloration (yellow/orange: {yellow_orange_pct:.1%}), highly textured long-grain rice structures (variance: {variance:.1f}), brown meat regions (brown: {brown_pct:.1%}), and visual patterns typical of Chicken Biryani with a CNN confidence of {conf_pct}."
+        return f"The model detected yellow-orange spice coloration (yellow/orange: {yellow_orange_pct:.1%}), highly textured long-grain rice structures (variance: {variance:.1f}, edge density: {edge_density:.1%}), brown meat regions (brown: {brown_pct:.1%}), and visual patterns typical of Chicken Biryani with a CNN confidence of {conf_pct}."
     elif food_type == "Veg Biryani":
-        return f"The model identified spiced yellow-orange rice layers (yellow/orange: {yellow_orange_pct:.1%}), highly textured grains (variance: {variance:.1f}), and distinct vegetable pieces matching Veg Biryani parameters with a CNN confidence of {conf_pct}."
+        return f"The model identified spiced yellow-orange rice layers (yellow/orange: {yellow_orange_pct:.1%}), highly textured grains (variance: {variance:.1f}, edge density: {edge_density:.1%}), and distinct vegetable pieces matching Veg Biryani parameters with a CNN confidence of {conf_pct}."
     elif food_type == "Steamed Rice":
-        return f"The model detected high density of white/bright pixel segments (white: {white_pct:.1%}), uniform texture (variance: {variance:.1f}), and low color saturation typical of Steamed Rice with a CNN confidence of {conf_pct}."
+        return f"The model detected high density of white/bright pixel segments (white: {white_pct:.1%}), uniform texture (variance: {variance:.1f}, edge density: {edge_density:.1%}), and low color saturation typical of Steamed Rice with a CNN confidence of {conf_pct}."
     elif food_type == "Fried Rice":
-        return f"The model identified mixed grain textures (variance: {variance:.1f}), yellow-orange and green inclusions (percent: {yellow_orange_pct + green_pct:.1%}), and stir-fried rice visual patterns with a CNN confidence of {conf_pct}."
+        return f"The model identified mixed grain textures (variance: {variance:.1f}, edge density: {edge_density:.1%}), yellow-orange and green inclusions (percent: {yellow_orange_pct + green_pct:.1%}), and stir-fried rice visual patterns with a CNN confidence of {conf_pct}."
     elif food_type == "Roti/Naan":
-        return f"The model identified brown/beige grain surface colors (brown: {brown_pct:.1%}), circular flatbread boundary shapes, and oven-baked texture details of Roti/Naan with a CNN confidence of {conf_pct}."
+        return f"The model identified brown/beige grain surface colors (brown: {brown_pct:.1%}), circular flatbread boundary shapes, and oven-baked texture details of Roti/Naan (edge density: {edge_density:.1%}) with a CNN confidence of {conf_pct}."
     elif food_type == "Sliced Bread":
-        return f"The model identified brown crust outlines (brown: {brown_pct:.1%}) and uniform slice geometries typical of packaged Sliced Bread with a CNN confidence of {conf_pct}."
+        return f"The model identified brown crust outlines (brown: {brown_pct:.1%}), edge density of {edge_density:.1%}, and uniform slice geometries typical of packaged Sliced Bread with a CNN confidence of {conf_pct}."
     elif food_type == "Chicken Curry":
-        return f"The model identified rich red/orange spiced liquid coloration (red/orange: {red_pct + yellow_orange_pct:.1%}), brown meat regions (brown: {brown_pct:.1%}), and visual patterns of Chicken Curry with a CNN confidence of {conf_pct}."
+        return f"The model identified rich red/orange spiced liquid coloration (red/orange: {red_pct + yellow_orange_pct:.1%}), brown meat regions (brown: {brown_pct:.1%}), and visual patterns of Chicken Curry (edge density: {edge_density:.1%}) with a CNN confidence of {conf_pct}."
     elif food_type == "Veg Curry":
-        return f"The model identified rich red/orange spiced liquid coloration (red/orange: {red_pct + yellow_orange_pct:.1%}), vegetable shapes, and visual patterns of Veg Curry with a CNN confidence of {conf_pct}."
+        return f"The model identified rich red/orange spiced liquid coloration (red/orange: {red_pct + yellow_orange_pct:.1%}), vegetable shapes, and visual patterns of Veg Curry (edge density: {edge_density:.1%}) with a CNN confidence of {conf_pct}."
     elif food_type == "Mixed Fruits":
-        return f"The model detected multiple vibrant hues (yellow/orange/red: {yellow_orange_pct + red_pct:.1%}) and distinct circular fruit shapes with a CNN confidence of {conf_pct}."
+        return f"The model detected multiple vibrant hues (yellow/orange/red: {yellow_orange_pct + red_pct:.1%}), edge density of {edge_density:.1%}, and distinct circular fruit shapes with a CNN confidence of {conf_pct}."
     elif food_type == "Mixed Vegetables":
-        return f"The model detected dominant green color hues (green: {green_pct:.1%}) and irregular vegetable shapes with a CNN confidence of {conf_pct}."
+        return f"The model detected dominant green color hues (green: {green_pct:.1%}), edge density of {edge_density:.1%}, and irregular vegetable shapes with a CNN confidence of {conf_pct}."
     else:
-        return f"The model detected typical mixed food textures (variance: {variance:.1f}) and color distributions matching generic food patterns with a CNN confidence of {conf_pct}."
+        return f"The model detected typical mixed food textures (variance: {variance:.1f}), edge density of {edge_density:.1%}, and color distributions matching generic food patterns with a CNN confidence of {conf_pct}."
+
 
 def classify_image(image_bytes: bytes):
     start_time = time.time()
@@ -352,6 +374,11 @@ def classify_image(image_bytes: bytes):
 
     gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
     variance = float(np.var(gray))
+    
+    # Canny Edge Detection & Density
+    edges = cv2.Canny(gray, 50, 150)
+    edge_density = float(np.sum(edges > 0) / edges.size)
+
     
     tf_success = False
     food_type = "Veg Curry"
@@ -434,7 +461,7 @@ def classify_image(image_bytes: bytes):
             {"label": "Mixed Vegetables" if food_type != "Mixed Vegetables" else "Mixed Fruits", "confidence": round(confidence * 0.2, 4)}
         ]
 
-    explanation = generate_explanation(food_type, confidence, white_pct, green_pct, yellow_orange_pct, red_pct, brown_pct, variance)
+    explanation = generate_explanation(food_type, confidence, white_pct, green_pct, yellow_orange_pct, red_pct, brown_pct, variance, edge_density)
     inference_time = round(time.time() - start_time, 4)
     
     return food_type, category, confidence, explanation, top3[:3], inference_time, not tf_success
@@ -472,14 +499,54 @@ async def root():
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_food(file: UploadFile = File(...), x_user_email: Optional[str] = Header(None, alias="X-User-Email")):
+    filename_lower = file.filename.lower() if file.filename else ""
+    if not (filename_lower.endswith(".jpg") or filename_lower.endswith(".jpeg") or filename_lower.endswith(".png") or filename_lower.endswith(".webp")):
+        return {
+            "category": "Prepared Meal",
+            "foodType": "Unsupported Format",
+            "confidence": 0.0,
+            "freshnessScore": 0.0,
+            "recommendation": "Manual verification required.",
+            "explanation": "Unsupported image format. Only JPG, JPEG, PNG, and WEBP are supported.",
+            "top3Predictions": [],
+            "inferenceTime": 0.001,
+            "imageUrl": ""
+        }
+
     image_bytes = await file.read()
+    file_size = len(image_bytes)
     
+    if file_size == 0:
+        return {
+            "category": "Prepared Meal",
+            "foodType": "Empty File",
+            "confidence": 0.0,
+            "freshnessScore": 0.0,
+            "recommendation": "Manual verification required.",
+            "explanation": "Uploaded file is empty. Please upload a valid image file.",
+            "top3Predictions": [],
+            "inferenceTime": 0.001,
+            "imageUrl": ""
+        }
+        
+    if file_size > 10 * 1024 * 1024:
+        return {
+            "category": "Prepared Meal",
+            "foodType": "File Too Large",
+            "confidence": 0.0,
+            "freshnessScore": 0.0,
+            "recommendation": "Manual verification required.",
+            "explanation": "Uploaded image exceeds the 10MB size limit.",
+            "top3Predictions": [],
+            "inferenceTime": 0.001,
+            "imageUrl": ""
+        }
+
     # Validate image format and check corruption
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     
     if img is None:
-        # Return direct error payload
         return {
             "category": "Prepared Meal",
             "foodType": "Corrupted Image",
@@ -491,6 +558,12 @@ async def analyze_food(file: UploadFile = File(...), x_user_email: Optional[str]
             "inferenceTime": 0.001,
             "imageUrl": ""
         }
+
+    # Compress large image if size is > 1.5MB
+    if file_size > 1.5 * 1024 * 1024:
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 75]
+        _, compressed_bytes_arr = cv2.imencode('.jpg', img, encode_param)
+        image_bytes = compressed_bytes_arr.tobytes()
 
     # Save image file to uploads folder
     filename = f"{uuid.uuid4().hex}.jpg"
@@ -521,7 +594,9 @@ async def analyze_food(file: UploadFile = File(...), x_user_email: Optional[str]
         inference_time=inf_time,
         image_url=image_url,
         user_email=x_user_email or "anonymous",
-        fallback_used=fallback_used
+        fallback_used=fallback_used,
+        top3_predictions=top3,
+        estimated_servings=15
     )
     
     return {
@@ -535,6 +610,7 @@ async def analyze_food(file: UploadFile = File(...), x_user_email: Optional[str]
         "inferenceTime": inf_time,
         "imageUrl": image_url
     }
+
 
 @app.post("/estimate-servings", response_model=ServingResponse)
 async def estimate_servings_endpoint(
@@ -1281,6 +1357,24 @@ async def get_ai_health_endpoint():
     fallback_usage = (fallback_count / total_predictions * 100.0) if total_predictions > 0 else 0.0
     success_rate = (success_count / total_predictions * 100.0) if total_predictions > 0 else 100.0
     
+    # System Telemetry
+    cpu_usage = 12.5
+    memory_usage = 45.2
+    try:
+        import psutil
+        cpu_usage = psutil.cpu_percent()
+        memory_usage = psutil.virtual_memory().percent
+    except Exception:
+        pass
+        
+    gpu_available = False
+    if HAS_TF:
+        try:
+            gpu_available = len(tf.config.list_physical_devices('GPU')) > 0
+        except Exception:
+            pass
+    gpu_status = "Available" if gpu_available else "Not Detected"
+    
     return {
         "modelName": "MobileNetV2 Food Classifier",
         "modelVersion": "v2.1.0",
@@ -1295,8 +1389,13 @@ async def get_ai_health_endpoint():
         "tfStatus": "Active" if (HAS_TF and model is not None) else "Disabled",
         "cvStatus": "Active",
         "fallbackUsagePercentage": round(fallback_usage, 1),
-        "predictionSuccessRate": round(success_rate, 1)
+        "predictionSuccessRate": round(success_rate, 1),
+        "cpuUsage": round(float(cpu_usage), 1),
+        "memoryUsage": round(float(memory_usage), 1),
+        "gpuStatus": gpu_status,
+        "modelLoadTime": MODEL_LOAD_TIME
     }
+
 
 @app.get("/feedback-stats")
 async def get_feedback_stats_endpoint():
@@ -1390,6 +1489,9 @@ async def get_predictions_endpoint(
                     "freshnessScore": doc.get("freshnessScore"),
                     "imageUrl": doc.get("imageUrl"),
                     "userEmail": doc.get("userEmail"),
+                    "explanation": doc.get("explanation"),
+                    "top3Predictions": doc.get("top3Predictions", []),
+                    "estimatedServings": doc.get("estimatedServings", 15),
                     "timestamp": doc.get("timestamp").isoformat() if doc.get("timestamp") else None
                 })
         except Exception:
@@ -1422,9 +1524,13 @@ async def get_predictions_endpoint(
             cursor.execute(count_sql, params)
             total = cursor.fetchone()[0]
             
-            select_sql = f"SELECT id, foodType, category, confidence, freshnessScore, imageUrl, userEmail, timestamp FROM food_analysis {where_str} ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+            select_sql = f"SELECT id, foodType, category, confidence, freshnessScore, imageUrl, userEmail, explanation, top3Predictions, estimatedServings, timestamp FROM food_analysis {where_str} ORDER BY timestamp DESC LIMIT ? OFFSET ?"
             cursor.execute(select_sql, params + [limit, offset])
             for row in cursor.fetchall():
+                try:
+                    top3_parsed = json.loads(row[8]) if row[8] else []
+                except Exception:
+                    top3_parsed = []
                 results.append({
                     "id": str(row[0]),
                     "foodType": row[1],
@@ -1433,7 +1539,10 @@ async def get_predictions_endpoint(
                     "freshnessScore": row[4],
                     "imageUrl": row[5],
                     "userEmail": row[6],
-                    "timestamp": row[7]
+                    "explanation": row[7],
+                    "top3Predictions": top3_parsed,
+                    "estimatedServings": row[9] if row[9] is not None else 15,
+                    "timestamp": row[10]
                 })
             conn.close()
         except Exception as e:
@@ -1446,6 +1555,7 @@ async def get_predictions_endpoint(
         "limit": limit,
         "pages": math.ceil(total / limit) if total > 0 else 1
     }
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

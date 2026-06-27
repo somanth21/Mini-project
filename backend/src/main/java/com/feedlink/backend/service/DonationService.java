@@ -4,6 +4,8 @@ import com.feedlink.backend.entity.Donation;
 import com.feedlink.backend.entity.DonationStatus;
 import com.feedlink.backend.entity.User;
 import com.feedlink.backend.repository.DonationRepository;
+import com.feedlink.backend.repository.UserRepository;
+import com.feedlink.backend.entity.Role;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
@@ -16,13 +18,30 @@ public class DonationService {
 
     private final DonationRepository repository;
     private final NotificationService notificationService;
+    private final UserRepository userRepository;
+
 
     public Donation createDonation(Donation donation) {
         Donation saved = repository.save(donation);
-        // Notify NGOs that a new donation is available
+        
+        // Notify all NGOs in the database dynamically (persists in their notification history)
+        try {
+            userRepository.findAll().stream()
+                .filter(u -> u.getRole() == Role.NGO)
+                .forEach(ngoUser -> notificationService.sendNotification(
+                    ngoUser.getId(), 
+                    "New Donation Available", 
+                    "A new food donation of " + saved.getFoodType() + " is available near you!"
+                ));
+        } catch (Exception e) {
+            System.err.println("Error creating persistent notifications for NGOs: " + e.getMessage());
+        }
+        
+        // Broadcast via default topic (userId = 0L)
         notificationService.sendNotification(0L, "New Donation Available", "A new food donation of " + saved.getFoodType() + " is available!");
         return saved;
     }
+
 
     public List<Donation> getAvailableDonations() {
         return repository.findByStatus(DonationStatus.AVAILABLE);
@@ -65,12 +84,16 @@ public class DonationService {
 
     public Donation verifyQrCode(Long id, String token, User user) {
         Donation donation = repository.findById(id).orElseThrow();
+        if (donation.getStatus() == DonationStatus.DELIVERED) {
+            throw new IllegalArgumentException("Donation has already been verified and delivered.");
+        }
         if (donation.getVerificationToken() == null || !donation.getVerificationToken().equals(token)) {
             throw new IllegalArgumentException("Invalid or expired QR verification token.");
         }
         donation.setStatus(DonationStatus.DELIVERED);
         donation.setDeliveredAt(LocalDateTime.now());
         donation.setVolunteer(user);
+        donation.setVerificationToken(null); // Expire token after use
         Donation saved = repository.save(donation);
         
         // Notify Hotel & NGO
@@ -84,6 +107,7 @@ public class DonationService {
         }
         return saved;
     }
+
 
     public List<Donation> getDonationsByUser(User user) {
         return switch (user.getRole()) {

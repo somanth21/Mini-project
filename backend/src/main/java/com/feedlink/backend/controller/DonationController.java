@@ -99,7 +99,16 @@ public class DonationController {
                 .mapToInt(d -> d.getQuantity() != null ? d.getQuantity() : 0)
                 .sum();
                 
-        long activeVolunteers = 5; // Mock value as per requirement
+        long activeVolunteers = ngoDonations.stream()
+                .map(Donation::getVolunteer)
+                .filter(java.util.Objects::nonNull)
+                .map(User::getId)
+                .distinct()
+                .count();
+        if (activeVolunteers == 0) {
+            activeVolunteers = 1;
+        }
+
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("availableDonations", availableDonations);

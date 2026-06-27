@@ -321,6 +321,25 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleDownloadPredictionsReport = async (format) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`http://localhost:8080/api/reports/predictions?format=${format}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], { type: format === 'pdf' ? 'application/pdf' : 'text/csv' });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `feedlink_prediction_logs_report.${format}`;
+      link.click();
+    } catch (err) {
+      console.error('Error downloading predictions report:', err);
+      alert('Failed to download predictions report.');
+    }
+  };
+
+
   const pendingNgos = ngos.filter(ngo => ngo.approvalStatus === 'PENDING');
 
   const chartData = {
@@ -1164,14 +1183,24 @@ const AdminDashboard = () => {
                 ))}
               </select>
 
-              {/* CSV Downloader */}
-              <button
-                onClick={() => downloadCSV(predictionsList, 'prediction_history.csv')}
-                className="btn btn-sm bg-indigo-600 hover:bg-indigo-700 text-white border-none flex items-center gap-1.5 text-xs py-2 px-4 cursor-pointer rounded-xl font-bold"
-              >
-                <Download size={14} />
-                <span>Export to CSV</span>
-              </button>
+
+              {/* PDF & CSV Downloaders */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleDownloadPredictionsReport('pdf')}
+                  className="btn btn-sm bg-rose-600 hover:bg-rose-700 text-white border-none flex items-center gap-1.5 text-xs py-2 px-4 cursor-pointer rounded-xl font-bold"
+                >
+                  <FileText size={14} />
+                  <span>Export PDF</span>
+                </button>
+                <button
+                  onClick={() => handleDownloadPredictionsReport('csv')}
+                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-700 text-white border-none flex items-center gap-1.5 text-xs py-2 px-4 cursor-pointer rounded-xl font-bold"
+                >
+                  <Download size={14} />
+                  <span>Export CSV</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1194,6 +1223,7 @@ const AdminDashboard = () => {
                       <th className="px-8 py-4">Surplus Item & Category</th>
                       <th className="px-8 py-4">Confidence</th>
                       <th className="px-8 py-4">Freshness</th>
+                      <th className="px-8 py-4">Servings</th>
                       <th className="px-8 py-4">Uploader</th>
                       <th className="px-8 py-4">Timestamp</th>
                       <th className="px-8 py-4 text-right">Raw Output</th>
@@ -1213,7 +1243,16 @@ const AdminDashboard = () => {
                          </td>
                          <td className="px-8 py-5">
                            <p className="font-bold text-slate-800">{log.foodType}</p>
-                           <p className="text-[10px] text-emerald-600 font-bold">{log.category}</p>
+                           <p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-0.5">
+                             {log.top3Predictions && log.top3Predictions.length > 0 ? (
+                               <span>
+                                 Top predictions: {log.top3Predictions.map(p => `${p.label} (${Math.round(p.confidence * 100)}%)`).join(', ')}
+                               </span>
+                             ) : (
+                               <span>No secondary predictions logged</span>
+                             )}
+                           </p>
+                           <p className="text-[10px] text-emerald-600 font-bold mt-0.5">{log.category}</p>
                          </td>
                          <td className="px-8 py-5">
                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -1226,6 +1265,7 @@ const AdminDashboard = () => {
                            </span>
                          </td>
                          <td className="px-8 py-5 font-bold text-emerald-600">{log.freshnessScore}%</td>
+                         <td className="px-8 py-5 font-bold text-slate-700">{log.estimatedServings || 15} servings</td>
                          <td className="px-8 py-5 text-xs text-slate-500 font-medium">{log.userEmail || 'anonymous'}</td>
                          <td className="px-8 py-5 text-xs text-slate-400">{log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A'}</td>
                          <td className="px-8 py-5 text-right">
@@ -1241,7 +1281,7 @@ const AdminDashboard = () => {
                    ))}
                    {predictionsList.length === 0 && (
                       <tr>
-                        <td colSpan="7" className="py-8 text-center text-slate-400">No predictions matching filters logged in database.</td>
+                        <td colSpan="8" className="py-8 text-center text-slate-400">No predictions matching filters logged in database.</td>
                       </tr>
                    )}
                 </tbody>

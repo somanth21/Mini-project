@@ -6,6 +6,8 @@ import com.feedlink.backend.entity.User;
 import com.feedlink.backend.entity.AIPredictionLog;
 import com.feedlink.backend.repository.NgoRepository;
 import com.feedlink.backend.repository.AIPredictionRepository;
+import com.feedlink.backend.repository.UserRepository;
+import com.feedlink.backend.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.*;
@@ -26,8 +28,11 @@ public class AiService {
 
     private final NgoRepository ngoRepository;
     private final AIPredictionRepository aiPredictionRepository;
+    private final UserRepository userRepository;
+    private final NotificationService notificationService;
     private final RestTemplate restTemplate = new RestTemplate();
     private final String FASTAPI_URL = "http://localhost:8000";
+
 
     public FoodAnalysisResponse analyzeFood(MultipartFile file, String userEmail) throws IOException {
         HttpHeaders headers = new HttpHeaders();
@@ -65,10 +70,23 @@ public class AiService {
                     .predictionRaw(responseBody.getExplanation())
                     .timestamp(LocalDateTime.now())
                     .build();
-            aiPredictionRepository.save(log);
+            AIPredictionLog savedLog = aiPredictionRepository.save(log);
+
+            // Send notification to user
+            if (userEmail != null && !"anonymous".equalsIgnoreCase(userEmail)) {
+                try {
+                    userRepository.findByEmail(userEmail).ifPresent(u -> 
+                        notificationService.sendNotification(u.getId(), "AI Prediction Completed", 
+                            "Inference completed for " + savedLog.getFoodType() + " (" + String.format("%.1f%%", savedLog.getConfidence() * 100.0) + " confidence)")
+                    );
+                } catch (Exception e) {
+                    System.err.println("Failed to send prediction completion notification: " + e.getMessage());
+                }
+            }
         }
 
         return responseBody;
+
     }
 
     public ServingEstimationResponse estimateServings(MultipartFile file, String quantity, String foodType) throws IOException {

@@ -13,6 +13,11 @@ const NGODashboard = () => {
   const [donations, setDonations] = useState([]);
   const [myDonations, setMyDonations] = useState([]);
   const [heatmapData, setHeatmapData] = useState([]);
+  const [ngoLocations, setNgoLocations] = useState([]);
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterDate, setFilterDate] = useState('ALL');
+  const [showNgos, setShowNgos] = useState(true);
+  const [showCoverage, setShowCoverage] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const [showVerifyModal, setShowVerifyModal] = useState(false);
@@ -22,6 +27,7 @@ const NGODashboard = () => {
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [verifyError, setVerifyError] = useState('');
   const [verifySuccess, setVerifySuccess] = useState(false);
+
 
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [correctedLabel, setCorrectedLabel] = useState('');
@@ -71,11 +77,18 @@ const NGODashboard = () => {
           headers: { Authorization: `Bearer ${token}` }
         });
         setHeatmapData(heatRes.data);
+
+        // Fetch active NGO locations
+        const ngoRes = await axios.get('http://localhost:8080/api/maps/ngos', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setNgoLocations(ngoRes.data);
       }
     } catch (err) {
       console.error('Error fetching donations:', err);
     }
   };
+
 
   useEffect(() => {
     fetchDonations();
@@ -211,30 +224,135 @@ const NGODashboard = () => {
         {/* Main Content Area */}
         <div className="lg:col-span-3 card min-h-[550px] flex flex-col bg-white border border-slate-100 shadow-sm rounded-3xl overflow-hidden">
           {activeTab === 'map' && (
-            <div className="flex-grow relative rounded-xl overflow-hidden min-h-[500px]">
-               <MapContainer center={mapCenter} zoom={13} className="h-full w-full z-0 min-h-[500px]">
-                  <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  />
-                  {donations.map(don => (
-                    <Marker key={don.id} position={[don.latitude || 17.4300, don.longitude || 78.4000]}>
-                      <Popup>
-                        <div className="p-1 min-w-[150px]">
-                          <p className="font-bold text-slate-950">{don.foodType}</p>
-                          <p className="text-xs text-slate-600 mt-1 font-semibold">{don.quantity} servings</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">{don.pickupAddress}</p>
-                          <button 
-                            className="btn btn-primary w-full text-[10px] py-1.5 mt-2 cursor-pointer"
-                            onClick={() => setSelectedDonation(don)}
-                          >
-                            Select Donation
-                          </button>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-               </MapContainer>
+            <div className="flex flex-col flex-grow relative rounded-xl overflow-hidden min-h-[500px]">
+               {/* Map Filters Panel */}
+               <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-4 items-center justify-between z-[500]">
+                  <div className="flex flex-wrap gap-4 items-center">
+                     {/* Status Filter */}
+                     <div className="flex flex-col">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Status</label>
+                        <select 
+                           value={filterStatus} 
+                           onChange={e => setFilterStatus(e.target.value)}
+                           className="select select-sm select-bordered text-xs rounded-xl w-36 bg-white border-slate-200"
+                        >
+                           <option value="ALL">All Donations</option>
+                           <option value="AVAILABLE">Available</option>
+                           <option value="ACCEPTED">Accepted / Claimed</option>
+                           <option value="DELIVERED">Delivered</option>
+                        </select>
+                     </div>
+                     
+                     {/* Date Filter */}
+                     <div className="flex flex-col">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Date Period</label>
+                        <select 
+                           value={filterDate} 
+                           onChange={e => setFilterDate(e.target.value)}
+                           className="select select-sm select-bordered text-xs rounded-xl w-36 bg-white border-slate-200"
+                        >
+                           <option value="ALL">All Time</option>
+                           <option value="TODAY">Last 24 Hours</option>
+                           <option value="WEEK">Last 7 Days</option>
+                        </select>
+                     </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-4 items-center">
+                     {/* Toggle NGO Overlay */}
+                     <label className="flex items-center gap-2 text-xs font-bold text-slate-650 cursor-pointer">
+                        <input 
+                           type="checkbox" 
+                           checked={showNgos} 
+                           onChange={e => setShowNgos(e.target.checked)}
+                           className="checkbox checkbox-sm checkbox-primary rounded-lg"
+                        />
+                        <span>Show NGOs</span>
+                     </label>
+
+                     {/* Toggle Coverage Overlay */}
+                     <label className="flex items-center gap-2 text-xs font-bold text-slate-650 cursor-pointer">
+                        <input 
+                           type="checkbox" 
+                           checked={showCoverage} 
+                           onChange={e => setShowCoverage(e.target.checked)}
+                           className="checkbox checkbox-sm checkbox-primary rounded-lg"
+                        />
+                        <span>Coverage Zone (5km)</span>
+                     </label>
+                  </div>
+               </div>
+
+               <div className="flex-grow relative min-h-[450px]">
+                  <MapContainer center={mapCenter} zoom={13} className="h-full w-full z-0 min-h-[450px]">
+                     <TileLayer
+                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                       attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                     />
+                     
+                     {/* Plotting Filtered Donations */}
+                     {[...donations, ...myDonations].filter(don => {
+                        if (filterStatus !== 'ALL' && don.status !== filterStatus) return false;
+                        if (filterDate !== 'ALL' && don.createdAt) {
+                           const created = new Date(don.createdAt);
+                           const now = new Date();
+                           if (filterDate === 'TODAY' && (now - created) > 24 * 60 * 60 * 1000) return false;
+                           if (filterDate === 'WEEK' && (now - created) > 7 * 24 * 60 * 60 * 1000) return false;
+                        }
+                        return true;
+                     }).map(don => (
+                       <Marker key={don.id} position={[don.latitude || 17.4300, don.longitude || 78.4000]}>
+                         <Popup>
+                           <div className="p-1 min-w-[150px]">
+                             <p className="font-bold text-slate-950">{don.foodType}</p>
+                             <p className="text-xs text-slate-600 mt-1 font-semibold">{don.quantity} servings</p>
+                             <p className="text-[10px] text-slate-400 mt-0.5">{don.pickupAddress}</p>
+                             <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full inline-block mt-1.5 uppercase ${
+                               don.status === 'AVAILABLE' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                               (don.status === 'DELIVERED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-blue-50 text-blue-700 border border-blue-200')
+                             }`}>
+                               {don.status}
+                             </span>
+                             {don.status === 'AVAILABLE' && (
+                               <button 
+                                 className="btn btn-primary w-full text-[10px] py-1.5 mt-2 cursor-pointer"
+                                 onClick={() => setSelectedDonation(don)}
+                               >
+                                 Select Donation
+                               </button>
+                             )}
+                           </div>
+                         </Popup>
+                       </Marker>
+                     ))}
+
+                     {/* Plotting NGOs */}
+                     {showNgos && ngoLocations.map((ngo, idx) => (
+                       <Marker key={`ngo-${idx}`} position={[ngo.latitude, ngo.longitude]}>
+                         <Popup>
+                           <div className="p-2 space-y-1">
+                             <h4 className="font-bold text-xs text-indigo-700">{ngo.name}</h4>
+                             <p className="text-[10px] text-slate-500 font-semibold">{ngo.address}</p>
+                             <span className="text-[8px] bg-indigo-50 border border-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full inline-block mt-1 font-bold">
+                               NGO Partner
+                             </span>
+                           </div>
+                         </Popup>
+                       </Marker>
+                     ))}
+
+                     {/* Plotting NGO Coverage Circles */}
+                     {showCoverage && ngoLocations.map((ngo, idx) => (
+                       <Circle
+                         key={`cov-${idx}`}
+                         center={[ngo.latitude, ngo.longitude]}
+                         radius={5000}
+                         pathOptions={{ color: '#6366f1', fillColor: '#6366f1', fillOpacity: 0.1, weight: 1.5 }}
+                       />
+                     ))}
+                  </MapContainer>
+               </div>
+
 
                {/* Map Overlay for Details */}
                {selectedDonation && (

@@ -2,6 +2,7 @@ package com.feedlink.backend.controller;
 
 import com.feedlink.backend.entity.*;
 import com.feedlink.backend.repository.*;
+import com.feedlink.backend.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,6 +22,8 @@ public class AdminController {
     private final NgoRepository ngoRepository;
     private final DonationRepository donationRepository;
     private final AIPredictionRepository aiPredictionRepository;
+    private final NotificationService notificationService;
+
 
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getAdminStats() {
@@ -76,6 +79,14 @@ public class AdminController {
         user.setVerified(true);
         userRepository.save(user);
 
+        // Notify user
+        try {
+            notificationService.sendNotification(user.getId(), "Account Approved", 
+                "Your NGO account has been approved by the Administrator. You can now claim food donations!");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         return ResponseEntity.ok(Map.of("message", "NGO approved successfully."));
     }
 
@@ -91,6 +102,14 @@ public class AdminController {
         user.setVerified(false);
         userRepository.save(user);
 
+        // Notify user
+        try {
+            notificationService.sendNotification(user.getId(), "Account Rejected", 
+                "Your NGO registration has been rejected. Please verify your registration documents.");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         return ResponseEntity.ok(Map.of("message", "NGO registration rejected."));
     }
 
@@ -100,6 +119,14 @@ public class AdminController {
                 .orElseThrow(() -> new RuntimeException("User not found"));
         user.setAccountStatus("SUSPENDED");
         userRepository.save(user);
+
+        // Notify user
+        try {
+            notificationService.sendNotification(user.getId(), "Account Suspended", 
+                "Your account has been suspended by the Administrator. Contact support for details.");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
         return ResponseEntity.ok(Map.of("message", "User suspended successfully."));
     }
@@ -121,8 +148,18 @@ public class AdminController {
         }
         
         userRepository.save(user);
+
+        // Notify user
+        try {
+            notificationService.sendNotification(user.getId(), "Account Reactivated", 
+                "Your account has been reactivated successfully!");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         return ResponseEntity.ok(Map.of("message", "User reactivated successfully."));
     }
+
 
     @GetMapping("/donations")
     public ResponseEntity<List<Donation>> getAllDonations() {
