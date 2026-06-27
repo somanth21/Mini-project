@@ -15,11 +15,21 @@ import time
 import uuid
 from pymongo import MongoClient
 
+from dotenv import load_dotenv
+load_dotenv()
+
+# Startup verification check
+if not os.getenv("GEMINI_API_KEY"):
+    import sys
+    print("CRITICAL STARTUP ERROR: GEMINI_API_KEY environment variable is missing.")
+    sys.exit(1)
+
 app = FastAPI(title="FeedLink AI Service")
 
 # Create uploads directory for Static serving of prediction images
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 # --- DATABASE CONFIGURATION ---
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
@@ -565,13 +575,25 @@ async def analyze_food(file: UploadFile = File(...), x_user_email: Optional[str]
         _, compressed_bytes_arr = cv2.imencode('.jpg', img, encode_param)
         image_bytes = compressed_bytes_arr.tobytes()
 
-    # Save image file to uploads folder
-    filename = f"{uuid.uuid4().hex}.jpg"
-    filepath = os.path.join("uploads", filename)
-    with open(filepath, "wb") as buffer:
-        buffer.write(image_bytes)
-        
-    image_url = f"http://localhost:8000/uploads/{filename}"
+    # Optional Cloudinary upload or local storage fallback
+    cloudinary_url = os.getenv("CLOUDINARY_URL")
+    image_url = ""
+    if cloudinary_url:
+        try:
+            import cloudinary
+            import cloudinary.uploader
+            upload_result = cloudinary.uploader.upload(image_bytes)
+            image_url = upload_result.get("secure_url")
+        except Exception as e:
+            print(f"Failed to upload to Cloudinary: {e}. Falling back to local storage.")
+
+    if not image_url:
+        filename = f"{uuid.uuid4().hex}.jpg"
+        filepath = os.path.join("uploads", filename)
+        with open(filepath, "wb") as buffer:
+            buffer.write(image_bytes)
+        image_url = f"http://localhost:8000/uploads/{filename}"
+
     
     food_type, category, confidence, explanation, top3, inf_time, fallback_used = classify_image(image_bytes)
     
@@ -992,7 +1014,8 @@ import urllib.request
 from datetime import timedelta
 
 def call_gemini(system_prompt: str, user_message: str, history: list) -> str:
-    api_key = "AIzaSyCmRuIScRaAA1fTI9XpNpfgC2dTyVtCwPc"
+    api_key = os.getenv("GEMINI_API_KEY")
+
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     contents = []

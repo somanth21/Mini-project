@@ -9,6 +9,7 @@ import com.feedlink.backend.repository.AIPredictionRepository;
 import com.feedlink.backend.repository.UserRepository;
 import com.feedlink.backend.service.NotificationService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,10 @@ public class AiService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final RestTemplate restTemplate = new RestTemplate();
-    private final String FASTAPI_URL = "http://localhost:8000";
+
+    @Value("${fastapi.url}")
+    private String fastapiUrl;
+
 
 
     public FoodAnalysisResponse analyzeFood(MultipartFile file, String userEmail) throws IOException {
@@ -53,7 +57,7 @@ public class AiService {
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
         ResponseEntity<FoodAnalysisResponse> response = restTemplate.postForEntity(
-                FASTAPI_URL + "/analyze",
+                fastapiUrl + "/analyze",
                 requestEntity,
                 FoodAnalysisResponse.class
         );
@@ -107,7 +111,7 @@ public class AiService {
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
         ResponseEntity<ServingEstimationResponse> response = restTemplate.postForEntity(
-                FASTAPI_URL + "/estimate-servings",
+                fastapiUrl + "/estimate-servings",
                 requestEntity,
                 ServingEstimationResponse.class
         );
@@ -148,7 +152,7 @@ public class AiService {
         HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
 
         ResponseEntity<Map> response = restTemplate.postForEntity(
-                FASTAPI_URL + "/recommend",
+                fastapiUrl + "/recommend",
                 requestEntity,
                 Map.class
         );
@@ -158,7 +162,7 @@ public class AiService {
 
     public Map<String, Object> getAnalytics() {
         ResponseEntity<Map> response = restTemplate.getForEntity(
-                FASTAPI_URL + "/analytics",
+                fastapiUrl + "/analytics",
                 Map.class
         );
         return response.getBody();
@@ -176,7 +180,7 @@ public class AiService {
         HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(payload, headers);
 
         ResponseEntity<Map> response = restTemplate.postForEntity(
-                FASTAPI_URL + "/chat",
+                fastapiUrl + "/chat",
                 requestEntity,
                 Map.class
         );
@@ -185,7 +189,7 @@ public class AiService {
 
     public Map<String, Object> getDemandForecast() {
         ResponseEntity<Map> response = restTemplate.getForEntity(
-                FASTAPI_URL + "/forecast",
+                fastapiUrl + "/forecast",
                 Map.class
         );
         return response.getBody();
@@ -197,7 +201,7 @@ public class AiService {
         HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(feedback, headers);
 
         restTemplate.postForEntity(
-                FASTAPI_URL + "/feedback",
+                fastapiUrl + "/feedback",
                 requestEntity,
                 Void.class
         );
@@ -205,7 +209,7 @@ public class AiService {
 
     public Map<String, Object> getDatasetStats() {
         ResponseEntity<Map> response = restTemplate.getForEntity(
-                FASTAPI_URL + "/dataset-stats",
+                fastapiUrl + "/dataset-stats",
                 Map.class
         );
         return response.getBody();
@@ -213,7 +217,7 @@ public class AiService {
 
     public Map<String, Object> getModelVersion() {
         ResponseEntity<Map> response = restTemplate.getForEntity(
-                FASTAPI_URL + "/model-version",
+                fastapiUrl + "/model-version",
                 Map.class
         );
         return response.getBody();
@@ -221,7 +225,7 @@ public class AiService {
 
     public Map<String, Object> getAiHealth() {
         ResponseEntity<Map> response = restTemplate.getForEntity(
-                FASTAPI_URL + "/ai-health",
+                fastapiUrl + "/ai-health",
                 Map.class
         );
         return response.getBody();
@@ -229,14 +233,14 @@ public class AiService {
 
     public Map<String, Object> getFeedbackStats() {
         ResponseEntity<Map> response = restTemplate.getForEntity(
-                FASTAPI_URL + "/feedback-stats",
+                fastapiUrl + "/feedback-stats",
                 Map.class
         );
         return response.getBody();
     }
 
     public Map<String, Object> getPredictions(int page, int limit, String search, String foodType, String category, String userEmail) {
-        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(FASTAPI_URL + "/predictions")
+        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(fastapiUrl + "/predictions")
                 .queryParam("page", page)
                 .queryParam("limit", limit);
         if (search != null && !search.trim().isEmpty()) builder.queryParam("search", search.trim());

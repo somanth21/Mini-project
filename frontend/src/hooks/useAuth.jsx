@@ -69,7 +69,7 @@ axios.interceptors.response.use(
       }
 
       try {
-        const res = await axios.post('http://localhost:8080/api/auth/refresh', { refreshToken });
+        const res = await axios.post((import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + '/api/auth/refresh', { refreshToken });
         const newAccessToken = res.data.accessToken;
         const newRefreshToken = res.data.refreshToken;
         
@@ -127,11 +127,12 @@ export const AuthProvider = ({ children }) => {
     const refreshToken = localStorage.getItem('refreshToken');
     try {
       if (refreshToken) {
-        await axios.post('http://localhost:8080/api/auth/logout', { refreshToken });
+        await axios.post((import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + '/api/auth/logout', { refreshToken });
       }
     } catch (e) {
       console.error("Error during server logout", e);
     }
+
     setUser(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');

@@ -1,19 +1,39 @@
-# Node.js
+# Environment Configuration Secrets
+.env
+.env.local
+.env.production
+.env.development
+*.env
+
+# Uploads and temporary data
+uploads/
+**/uploads/
+logs/
+*.log
+
+# Databases and Local Telemetry Logs
+*.db
+*.sqlite
+ai-service/ai_logs.db
+
+# Node.js Build and Packages
 node_modules/
+**/node_modules/
 dist/
 dist-ssr/
-*.local
 
-# Java Maven
+# Java Maven Builds and Classes
 **/target/
+target/
 .idea/
 *.class
 *.jar
 *.war
 *.ear
 
-# Python
+# Python Caches and Virtual Environments
 __pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
@@ -24,9 +44,12 @@ pip-log.txt
 .tox/
 .coverage
 .cache
-*.log
-ai-service/ai_logs.db
 
-# OS
+# OS and IDE files
 .DS_Store
 Thumbs.db
+.vscode/
+.settings/
+.project
+.classpath
+

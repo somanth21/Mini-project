@@ -68,7 +68,7 @@ const ChatbotWidget = () => {
         content: m.content
       }));
 
-      const res = await axios.post('http://localhost:8080/api/chatbot/message', {
+      const res = await axios.post((import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + '/api/chatbot/message', {
         message: messageToSend,
         conversationId,
         history: historyPayload

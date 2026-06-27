@@ -41,6 +41,7 @@ ChartJS.register(
 );
 
 const AdminDashboard = () => {
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'users', 'ai-insights', 'dataset', 'ai-logs'
   const [predictionsList, setPredictionsList] = useState([]);
   const [predPage, setPredPage] = useState(1);
@@ -94,24 +95,24 @@ const AdminDashboard = () => {
       const headers = { Authorization: `Bearer ${token}` };
 
       // 1. Fetch Stats
-      const statsRes = await axios.get('http://localhost:8080/api/admin/stats', { headers });
+      const statsRes = await axios.get(BASE_URL + '/api/admin/stats', { headers });
       setStats(statsRes.data);
 
       // 2. Fetch NGOs
-      const ngosRes = await axios.get('http://localhost:8080/api/admin/ngos', { headers });
+      const ngosRes = await axios.get(BASE_URL + '/api/admin/ngos', { headers });
       setNgos(ngosRes.data);
 
       // 3. Fetch Users
-      const usersRes = await axios.get('http://localhost:8080/api/admin/users', { headers });
+      const usersRes = await axios.get(BASE_URL + '/api/admin/users', { headers });
       setUsersList(usersRes.data);
 
       // 4. Fetch AI Logs
-      const logsRes = await axios.get('http://localhost:8080/api/admin/ai-logs', { headers });
+      const logsRes = await axios.get(BASE_URL + '/api/admin/ai-logs', { headers });
       setAiLogs(logsRes.data);
 
       // 5. Fetch AI Insights Analytics
       try {
-        const aiRes = await axios.get('http://localhost:8080/api/ai/analytics', { headers });
+        const aiRes = await axios.get(BASE_URL + '/api/ai/analytics', { headers });
         setAiAnalytics(aiRes.data);
       } catch (aiErr) {
         console.error('Error fetching AI analytics:', aiErr);
@@ -119,7 +120,7 @@ const AdminDashboard = () => {
 
       // 6. Fetch AI Demand Forecast
       try {
-        const forecastRes = await axios.get('http://localhost:8080/api/ai/demand-forecast', { headers });
+        const forecastRes = await axios.get(BASE_URL + '/api/ai/demand-forecast', { headers });
         setForecastData(forecastRes.data);
       } catch (forecastErr) {
         console.error('Error fetching demand forecast:', forecastErr);
@@ -127,7 +128,7 @@ const AdminDashboard = () => {
 
       // 7. Fetch Hotspots
       try {
-        const hotspotsRes = await axios.get('http://localhost:8080/api/analytics/hotspots', { headers });
+        const hotspotsRes = await axios.get(BASE_URL + '/api/analytics/hotspots', { headers });
         setHotspots(hotspotsRes.data);
       } catch (hotspotErr) {
         console.error('Error fetching hotspots:', hotspotErr);
@@ -135,7 +136,7 @@ const AdminDashboard = () => {
 
       // 8. Fetch NGO Performance
       try {
-        const ngoPerfRes = await axios.get('http://localhost:8080/api/analytics/ngo-performance', { headers });
+        const ngoPerfRes = await axios.get(BASE_URL + '/api/analytics/ngo-performance', { headers });
         setNgoPerformance(ngoPerfRes.data);
       } catch (ngoPerfErr) {
         console.error('Error fetching NGO performance:', ngoPerfErr);
@@ -143,7 +144,7 @@ const AdminDashboard = () => {
 
       // 9. Fetch Hotel Performance
       try {
-        const hotelPerfRes = await axios.get('http://localhost:8080/api/analytics/hotel-performance', { headers });
+        const hotelPerfRes = await axios.get(BASE_URL + '/api/analytics/hotel-performance', { headers });
         setHotelPerformance(hotelPerfRes.data);
       } catch (hotelPerfErr) {
         console.error('Error fetching Hotel performance:', hotelPerfErr);
@@ -151,7 +152,7 @@ const AdminDashboard = () => {
 
       // 10. Fetch Dataset Stats
       try {
-        const dsRes = await axios.get('http://localhost:8080/api/ai/dataset-stats', { headers });
+        const dsRes = await axios.get(BASE_URL + '/api/ai/dataset-stats', { headers });
         setDatasetStats(dsRes.data);
       } catch (dsErr) {
         console.error('Error fetching dataset stats:', dsErr);
@@ -159,7 +160,7 @@ const AdminDashboard = () => {
 
       // 11. Fetch Model Version
       try {
-        const mvRes = await axios.get('http://localhost:8080/api/ai/model-version', { headers });
+        const mvRes = await axios.get(BASE_URL + '/api/ai/model-version', { headers });
         setModelVersion(mvRes.data);
       } catch (mvErr) {
         console.error('Error fetching model version:', mvErr);
@@ -167,7 +168,7 @@ const AdminDashboard = () => {
 
       // 12. Fetch AI Health Telemetry
       try {
-        const healthRes = await axios.get('http://localhost:8080/api/ai/ai-health', { headers });
+        const healthRes = await axios.get(BASE_URL + '/api/ai/ai-health', { headers });
         setAiHealth(healthRes.data);
       } catch (healthErr) {
         console.error('Error fetching AI health:', healthErr);
@@ -212,7 +213,7 @@ const AdminDashboard = () => {
       if (!token) return;
       const headers = { Authorization: `Bearer ${token}` };
       
-      let url = `http://localhost:8080/api/ai/predictions?page=${page}&limit=${predLimit}`;
+      let url = `${BASE_URL}/api/ai/predictions?page=${page}&limit=${predLimit}`;
       if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
       if (filterFoodType) url += `&foodType=${encodeURIComponent(filterFoodType)}`;
       if (filterCategory) url += `&category=${encodeURIComponent(filterCategory)}`;
@@ -244,7 +245,7 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:8080/api/admin/approve-ngo/${ngoId}`, {}, {
+      await axios.put(`${BASE_URL}/api/admin/approve-ngo/${ngoId}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchAllData();
@@ -260,7 +261,7 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:8080/api/admin/reject-ngo/${ngoId}`, {}, {
+      await axios.put(`${BASE_URL}/api/admin/reject-ngo/${ngoId}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchAllData();
@@ -276,7 +277,7 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:8080/api/admin/suspend-user/${userId}`, {}, {
+      await axios.put(`${BASE_URL}/api/admin/suspend-user/${userId}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchAllData();
@@ -292,7 +293,7 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:8080/api/admin/users/${userId}/reactivate`, {}, {
+      await axios.put(`${BASE_URL}/api/admin/users/${userId}/reactivate`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchAllData();
@@ -307,7 +308,7 @@ const AdminDashboard = () => {
   const handleDownloadReport = async (format) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:8080/api/reports/impact?format=${format}`, {
+      const response = await axios.get(`${BASE_URL}/api/reports/impact?format=${format}`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });
@@ -324,7 +325,7 @@ const AdminDashboard = () => {
   const handleDownloadPredictionsReport = async (format) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:8080/api/reports/predictions?format=${format}`, {
+      const response = await axios.get(`${BASE_URL}/api/reports/predictions?format=${format}`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });

@@ -34,7 +34,7 @@ const Login = () => {
     setSuccess('');
     
     try {
-      const response = await axios.post('http://localhost:8080/api/auth/login', { email, password });
+      const response = await axios.post((import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + '/api/auth/login', { email, password });
       const userData = response.data;
       
       if (userData.status === 'PENDING') {
@@ -82,7 +82,7 @@ const Login = () => {
     setSuccess('');
 
     try {
-      const response = await axios.post('http://localhost:8080/api/auth/forgot-password', { email });
+      const response = await axios.post((import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + '/api/auth/forgot-password', { email });
       setSuccess(response.data.message || 'Password reset link sent to ' + email);
       setLoading(false);
       setTimeout(() => setView('reset'), 2500);
@@ -99,7 +99,7 @@ const Login = () => {
     setSuccess('');
 
     try {
-      const response = await axios.post('http://localhost:8080/api/auth/reset-password', { email, password: newPassword });
+      const response = await axios.post((import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + '/api/auth/reset-password', { email, password: newPassword });
       setSuccess(response.data.message || 'Password reset successfully.');
       setLoading(false);
       setTimeout(() => {

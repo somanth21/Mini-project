@@ -40,9 +40,10 @@ const Register = () => {
     }
 
     try {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
       const endpoint = payload.role === 'HOTEL' 
-        ? 'http://localhost:8080/api/auth/register-hotel'
-        : 'http://localhost:8080/api/auth/register-ngo';
+        ? `${baseUrl}/api/auth/register-hotel`
+        : `${baseUrl}/api/auth/register-ngo`;
 
       const response = await axios.post(endpoint, payload);
       const userData = response.data;

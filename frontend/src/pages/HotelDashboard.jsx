@@ -5,6 +5,7 @@ import axios from 'axios';
 import ImpactDashboard from '../components/ImpactDashboard';
 
 const HotelDashboard = () => {
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
   const { user } = useAuth();
   const [analyzing, setAnalyzing] = useState(false);
   const [estimating, setEstimating] = useState(false);
@@ -34,7 +35,7 @@ const HotelDashboard = () => {
     if (!correctedLabel) return;
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8080/api/ai/feedback', {
+      await axios.post(BASE_URL + '/api/ai/feedback', {
         originalPrediction: analysisResult?.foodType || foodType,
         correctLabel: correctedLabel,
         userRole: 'HOTEL'
@@ -52,7 +53,7 @@ const HotelDashboard = () => {
     try {
       const token = localStorage.getItem('token');
       if (token) {
-        const response = await axios.get('http://localhost:8080/api/donations/my', {
+        const response = await axios.get(BASE_URL + '/api/donations/my', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setMyDonations(response.data);
@@ -80,7 +81,7 @@ const HotelDashboard = () => {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:8080/api/ai/analyze-food', formData, {
+      const response = await axios.post(BASE_URL + '/api/ai/analyze-food', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
@@ -112,7 +113,7 @@ const HotelDashboard = () => {
     formData.append('foodType', currentFoodType);
 
     try {
-      const servingsRes = await axios.post('http://localhost:8080/api/ai/estimate-servings', formData, {
+      const servingsRes = await axios.post(BASE_URL + '/api/ai/estimate-servings', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
@@ -120,7 +121,7 @@ const HotelDashboard = () => {
       setEstimatedServings(servingsData.estimatedServings);
       setServingConfidence(servingsData.confidence);
       
-      const recommendRes = await axios.post('http://localhost:8080/api/ai/recommend-ngos', {
+      const recommendRes = await axios.post(BASE_URL + '/api/ai/recommend-ngos', {
         latitude: user?.latitude || 17.4483,
         longitude: user?.longitude || 78.3741,
         foodType: currentFoodType,
@@ -149,7 +150,7 @@ const HotelDashboard = () => {
     setDonationStatus('SUBMITTING');
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8080/api/donations', {
+      await axios.post(BASE_URL + '/api/donations', {
         foodType: foodType,
         category: analysisResult.category,
         quantity: estimatedServings || 10,
@@ -174,7 +175,7 @@ const HotelDashboard = () => {
   const handleShowQr = async (donationId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post(`http://localhost:8080/api/donations/${donationId}/generate-qr`, {}, {
+      const response = await axios.post(`${BASE_URL}/api/donations/${donationId}/generate-qr`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setActiveQrCode(response.data.qrCodeImage);

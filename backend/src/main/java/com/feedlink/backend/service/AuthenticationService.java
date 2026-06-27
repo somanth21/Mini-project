@@ -151,6 +151,43 @@ public class AuthenticationService {
                 .build();
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.mail.javamail.JavaMailSender mailSender;
+
+    @org.springframework.beans.factory.annotation.Value("${spring.mail.host:}")
+    private String smtpHost;
+
+    @org.springframework.beans.factory.annotation.Value("${spring.mail.from:noreply@feedlink.ai}")
+    private String smtpFrom;
+
+    public void forgotPassword(String email) {
+        var user = repository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        String resetLink = "http://localhost:5173/login?view=reset&email=" + email;
+        
+        if (smtpHost != null && !smtpHost.trim().isEmpty() && mailSender != null) {
+            try {
+                org.springframework.mail.SimpleMailMessage message = new org.springframework.mail.SimpleMailMessage();
+                message.setFrom(smtpFrom);
+                message.setTo(email);
+                message.setSubject("FeedLink AI - Reset Password Request");
+                message.setText("Hello " + user.getName() + ",\n\n" +
+                        "We received a request to reset your password. Please use the link below to set a new password:\n" +
+                        resetLink + "\n\n" +
+                        "If you did not request this, you can ignore this email.\n\n" +
+                        "Best regards,\nFeedLink AI Team");
+                mailSender.send(message);
+                System.out.println(">>> Real SMTP password reset email successfully dispatched to: " + email);
+            } catch (Exception e) {
+                System.err.println("Failed to send SMTP email: " + e.getMessage() + ". Falling back to simulated behavior.");
+                System.out.println(">>> Simulated password reset link: " + resetLink);
+            }
+        } else {
+            System.out.println(">>> SMTP Host is not configured. Simulating password reset link: " + resetLink);
+        }
+    }
+
     public void resetPassword(String email, String newPassword) {
         var user = repository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -158,3 +195,4 @@ public class AuthenticationService {
         repository.save(user);
     }
 }
+

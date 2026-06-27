@@ -7,6 +7,7 @@ import axios from 'axios';
 import ImpactDashboard from '../components/ImpactDashboard';
 
 const NGODashboard = () => {
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('map');
   const [selectedDonation, setSelectedDonation] = useState(null);
@@ -38,7 +39,7 @@ const NGODashboard = () => {
     if (!correctedLabel || !selectedDonation) return;
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8080/api/ai/feedback', {
+      await axios.post(BASE_URL + '/api/ai/feedback', {
         originalPrediction: selectedDonation.foodType,
         correctLabel: correctedLabel,
         userRole: 'NGO'
@@ -61,25 +62,25 @@ const NGODashboard = () => {
       const token = localStorage.getItem('token');
       if (token) {
         // Fetch available donations for the map
-        const availRes = await axios.get('http://localhost:8080/api/donations/available', {
+        const availRes = await axios.get(BASE_URL + '/api/donations/available', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setDonations(availRes.data);
 
         // Fetch my accepted/completed donations
-        const myRes = await axios.get('http://localhost:8080/api/donations/my', {
+        const myRes = await axios.get(BASE_URL + '/api/donations/my', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setMyDonations(myRes.data);
 
         // Fetch heatmap data
-        const heatRes = await axios.get('http://localhost:8080/api/maps/heatmap', {
+        const heatRes = await axios.get(BASE_URL + '/api/maps/heatmap', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setHeatmapData(heatRes.data);
 
         // Fetch active NGO locations
-        const ngoRes = await axios.get('http://localhost:8080/api/maps/ngos', {
+        const ngoRes = await axios.get(BASE_URL + '/api/maps/ngos', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setNgoLocations(ngoRes.data);
@@ -114,7 +115,7 @@ const NGODashboard = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      await axios.patch(`http://localhost:8080/api/donations/${donationId}/status?status=ACCEPTED`, {}, {
+      await axios.patch(`${BASE_URL}/api/donations/${donationId}/status?status=ACCEPTED`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSelectedDonation(null);
@@ -144,7 +145,7 @@ const NGODashboard = () => {
     setVerifyError('');
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`http://localhost:8080/api/donations/${verifyDonationId}/verify-qr?token=${verifyToken.trim()}`, {}, {
+      await axios.post(`${BASE_URL}/api/donations/${verifyDonationId}/verify-qr?token=${verifyToken.trim()}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setVerifySuccess(true);

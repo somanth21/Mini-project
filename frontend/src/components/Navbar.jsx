@@ -18,7 +18,7 @@ const Navbar = () => {
     try {
       const token = localStorage.getItem('token');
       if (token) {
-        const res = await axios.get('http://localhost:8080/api/notifications', {
+        const res = await axios.get((import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + '/api/notifications', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setNotifications(res.data);
@@ -34,7 +34,7 @@ const Navbar = () => {
     fetchNotifications();
 
     // Setup STOMP WebSocket client
-    const socket = new SockJS('http://localhost:8080/ws');
+    const socket = new SockJS((import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + '/ws');
     const stompClient = new Client({
       webSocketFactory: () => socket,
       onConnect: () => {
@@ -71,7 +71,7 @@ const Navbar = () => {
   const handleMarkAsRead = async (id) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`http://localhost:8080/api/notifications/${id}/read`, {}, {
+      await axios.post((import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + `/api/notifications/${id}/read`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));

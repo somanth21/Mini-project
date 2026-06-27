@@ -80,6 +80,7 @@ public class AuthenticationController {
             @RequestBody Map<String, String> request
     ) {
         String email = request.get("email");
+        service.forgotPassword(email);
         return ResponseEntity.ok(Map.of("message", "Password reset link sent to " + email));
     }
 

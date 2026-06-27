@@ -12,7 +12,7 @@ const ImpactDashboard = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get(`http://localhost:8080/api/impact/metrics?timeFilter=${timeFilter}`, {
+      const res = await axios.get((import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + `/api/impact/metrics?timeFilter=${timeFilter}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setMetrics(res.data);
@@ -30,7 +30,7 @@ const ImpactDashboard = () => {
   const handleDownloadReport = async (format) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:8080/api/reports/impact?format=${format}`, {
+      const response = await axios.get((import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + `/api/reports/impact?format=${format}`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });
@@ -42,6 +42,7 @@ const ImpactDashboard = () => {
     } catch (err) {
       console.error('Error downloading report:', err);
     }
+
   };
 
   if (!metrics) {
